@@ -1,12 +1,14 @@
 import {
   hideBubble,
   renderErrorBubble,
+  renderLoadingBubble,
   renderSetupBubble,
   renderTranslationBubble,
 } from "./bubble";
 import { computeBubblePosition } from "./position";
+import { getSettings } from "../shared/storage";
 import { normalizeSelection, shouldIgnoreSelection } from "../shared/text";
-import type { TranslateResponse } from "../shared/types";
+import type { ExtensionSettings, TranslateResponse, TranslationResult } from "../shared/types";
 
 const BUBBLE_ID = "deepseek-selection-translate-bubble";
 const DEBOUNCE_MS = 220;
@@ -21,11 +23,18 @@ type CleanupHost = typeof globalThis & {
 
 let debounceTimer: number | undefined;
 let requestId = 0;
+let currentResult: TranslationResult | undefined;
+let currentPosition: ReturnType<typeof computeBubblePosition> | undefined;
+let currentBubbleFontSize = 12;
+let isSpeaking = false;
 
 function closeBubble(): void {
   window.clearTimeout(debounceTimer);
   debounceTimer = undefined;
   requestId += 1;
+  currentResult = undefined;
+  currentPosition = undefined;
+  isSpeaking = false;
   hideBubble();
 }
 
@@ -70,6 +79,7 @@ function openOptions(): void {
 }
 
 function speakSource(sourceText: string): void {
+  isSpeaking = true;
   try {
     const maybePromise = chrome.runtime.sendMessage({
       type: "speak-source",
@@ -81,6 +91,54 @@ function speakSource(sourceText: string): void {
   } catch {
     // Text-to-speech is best effort from the content script.
   }
+  rerenderCurrentTranslation();
+}
+
+function stopSpeaking(): void {
+  isSpeaking = false;
+  try {
+    const maybePromise = chrome.runtime.sendMessage({ type: "stop-speaking" });
+    if (maybePromise && typeof maybePromise.catch === "function") {
+      maybePromise.catch(() => undefined);
+    }
+  } catch {
+    // Stopping text-to-speech is best effort from the content script.
+  }
+  rerenderCurrentTranslation();
+}
+
+async function renderLoadingForSelection(
+  text: string,
+  currentRequestId: number,
+  position: ReturnType<typeof computeBubblePosition>,
+): Promise<void> {
+  renderLoadingBubble({ sourceText: text, position, bubbleFontSize: currentBubbleFontSize });
+  const settings = await readSettings();
+  if (currentRequestId !== requestId) return;
+
+  currentBubbleFontSize = settings.bubbleFontSize;
+  renderLoadingBubble({ sourceText: text, position, bubbleFontSize: currentBubbleFontSize });
+}
+
+async function readSettings(): Promise<ExtensionSettings> {
+  try {
+    return await getSettings();
+  } catch {
+    return { apiKey: "", targetLanguage: "zh-CN", bubbleFontSize: 12 };
+  }
+}
+
+function rerenderCurrentTranslation(): void {
+  if (!currentResult || !currentPosition) return;
+
+  renderTranslationBubble({
+    result: currentResult,
+    position: currentPosition,
+    bubbleFontSize: currentBubbleFontSize,
+    playbackState: isSpeaking ? "playing" : "idle",
+    speakSource,
+    stopSpeaking,
+  });
 }
 
 async function requestTranslation(
@@ -97,7 +155,10 @@ async function requestTranslation(
     if (currentRequestId !== requestId) return;
 
     if (response.ok) {
-      renderTranslationBubble({ result: response.result, position, speakSource });
+      currentResult = response.result;
+      currentPosition = position;
+      isSpeaking = false;
+      rerenderCurrentTranslation();
       return;
     }
 
@@ -117,26 +178,29 @@ async function requestTranslation(
 function handleSelectionChange(): void {
   requestId += 1;
   window.clearTimeout(debounceTimer);
+  const selectionState = getSelectionState();
+  if (!selectionState.ok) {
+    closeBubble();
+    return;
+  }
+
+  const position = computeBubblePosition({
+    selectionRect: selectionState.rect,
+    bubbleSize: ESTIMATED_BUBBLE_SIZE,
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    },
+    margin: VIEWPORT_MARGIN,
+  });
+  const currentRequestId = requestId + 1;
+  requestId = currentRequestId;
+  currentResult = undefined;
+  currentPosition = undefined;
+  isSpeaking = false;
+
+  void renderLoadingForSelection(selectionState.text, currentRequestId, position);
   debounceTimer = window.setTimeout(() => {
-    const selectionState = getSelectionState();
-    if (!selectionState.ok) {
-      closeBubble();
-      return;
-    }
-
-    const position = computeBubblePosition({
-      selectionRect: selectionState.rect,
-      bubbleSize: ESTIMATED_BUBBLE_SIZE,
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      },
-      margin: VIEWPORT_MARGIN,
-    });
-    const currentRequestId = requestId + 1;
-    requestId = currentRequestId;
-
-    renderErrorBubble(position, "翻译中...");
     void requestTranslation(selectionState.text, currentRequestId, position);
   }, DEBOUNCE_MS);
 }

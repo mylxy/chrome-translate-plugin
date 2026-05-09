@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import type { TranslateResponse } from "../shared/types";
+import type { ExtensionSettings, TranslateResponse } from "../shared/types";
 
 const BUBBLE_SELECTOR = "#deepseek-selection-translate-bubble";
 
@@ -28,10 +28,24 @@ function setViewport(width = 800, height = 600): void {
   });
 }
 
-function installChrome(sendMessage: SendMessageMock) {
+function installChrome(
+  sendMessage: SendMessageMock,
+  settings: ExtensionSettings = { apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 },
+) {
   vi.stubGlobal("chrome", {
     runtime: {
       sendMessage,
+    },
+    storage: {
+      local: {
+        get: vi.fn((keys: string[], callback: (items: Record<string, unknown>) => void) => {
+          const result: Record<string, unknown> = {};
+          for (const key of keys) {
+            result[key] = settings[key as keyof ExtensionSettings];
+          }
+          callback(result);
+        }),
+      },
     },
   });
 }
@@ -92,7 +106,9 @@ describe("content selection translation flow", () => {
     selectText("Hello world");
     await flushDebounce();
 
-    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toBe("翻译中...");
+    expect(document.querySelector(".dst-source")?.textContent).toBe("Hello world");
+    expect(document.querySelector(".dst-control")?.textContent).toBe("•••");
+    expect(document.querySelector(".dst-translation-placeholder")).not.toBeNull();
     expect(sendMessage).toHaveBeenCalledWith({
       type: "translate-selection",
       text: "Hello world",
@@ -111,6 +127,22 @@ describe("content selection translation flow", () => {
     expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toContain(
       "你好，世界",
     );
+  });
+
+  it("applies the saved bubble font size to the loading and translated bubble", async () => {
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      fromCache: false,
+      result: { sourceText: "Hello world", translation: "你好，世界" },
+    });
+    installChrome(sendMessage, { apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 18 });
+    await importContentScript();
+
+    selectText("Hello world");
+    await flushDebounce();
+    await Promise.resolve();
+
+    expect(document.querySelector<HTMLElement>(BUBBLE_SELECTOR)?.style.getPropertyValue("--dst-font-size")).toBe("18px");
   });
 
   it("asks the background to play the source text when the play button is clicked", async () => {
@@ -138,6 +170,36 @@ describe("content selection translation flow", () => {
     });
   });
 
+  it("toggles playback between speak-source and stop-speaking messages", async () => {
+    sendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        fromCache: false,
+        result: {
+          sourceText: "Hello world",
+          translation: "你好，世界",
+        },
+      })
+      .mockResolvedValueOnce(undefined as unknown as TranslateResponse)
+      .mockResolvedValueOnce(undefined as unknown as TranslateResponse);
+
+    selectText("Hello world");
+    await flushDebounce();
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>(".dst-control")?.click();
+    await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: "speak-source", text: "Hello world" });
+    expect(document.querySelector(".dst-control")?.textContent).toBe("Ⅱ");
+
+    document.querySelector<HTMLButtonElement>(".dst-control")?.click();
+    await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: "stop-speaking" });
+    expect(document.querySelector(".dst-control")?.textContent).toBe("▶");
+  });
+
   it("does not send before the debounce delay elapses", async () => {
     sendMessage.mockResolvedValue({
       ok: true,
@@ -147,9 +209,11 @@ describe("content selection translation flow", () => {
 
     selectText("Hello world");
     await vi.advanceTimersByTimeAsync(219);
+    await Promise.resolve();
 
     expect(sendMessage).not.toHaveBeenCalled();
-    expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+    expect(document.querySelector(".dst-source")?.textContent).toBe("Hello world");
+    expect(document.querySelector(".dst-control")?.textContent).toBe("•••");
   });
 
   it("only translates the last selection after consecutive selection changes", async () => {
@@ -250,9 +314,8 @@ describe("content selection translation flow", () => {
       type: "translate-selection",
       text: "Tall caret selection",
     });
-    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toContain(
-      "翻译中...",
-    );
+    expect(document.querySelector(".dst-source")?.textContent).toBe("Tall caret selection");
+    expect(document.querySelector(".dst-control")?.textContent).toBe("•••");
   });
 
   it("renders a failure message when sendMessage rejects", async () => {
@@ -381,7 +444,8 @@ describe("content selection translation flow", () => {
     });
     await Promise.resolve();
 
-    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toBe("翻译中...");
+    expect(document.querySelector(".dst-source")?.textContent).toBe("Second selection");
+    expect(document.querySelector(".dst-control")?.textContent).toBe("•••");
 
     await flushDebounce();
     second.resolve({
