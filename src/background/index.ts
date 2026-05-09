@@ -31,7 +31,11 @@ export async function handleTranslateSelection(text: string): Promise<TranslateR
 
     const result = await requestDeepSeekTranslation(apiKey, text, settings.targetLanguage);
     if (shouldCacheSelection(text)) {
-      await enqueueCacheWrite(text, settings.targetLanguage, result);
+      try {
+        await enqueueCacheWrite(text, settings.targetLanguage, result);
+      } catch {
+        // Cache persistence is best effort; a translated result should still reach the user.
+      }
     }
 
     return { ok: true, fromCache: false, result };

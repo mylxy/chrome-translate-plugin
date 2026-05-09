@@ -210,6 +210,41 @@ describe("background translation handling", () => {
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
   });
 
+  it("returns a successful translation when saving a short phrase to cache fails", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    installChromeRuntimeMock();
+    setChromeStorageError("set", "cache write failed");
+    const result: TranslationResult = { sourceText: "Learning", translation: "学习" };
+    requestDeepSeekTranslationMock.mockResolvedValueOnce(result);
+    const { handleTranslateSelection } = await importBackground();
+
+    await expect(handleTranslateSelection("Learning")).resolves.toEqual({
+      ok: true,
+      fromCache: false,
+      result
+    });
+  });
+
+  it("continues cache writes after a previous queued cache write fails", async () => {
+    const storage = installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    installChromeRuntimeMock();
+    setChromeStorageError("set", "first cache write failed");
+    const firstResult: TranslationResult = { sourceText: "Alpha", translation: "阿尔法" };
+    const secondResult: TranslationResult = { sourceText: "Beta", translation: "贝塔" };
+    requestDeepSeekTranslationMock.mockResolvedValueOnce(firstResult).mockResolvedValueOnce(secondResult);
+    const { handleTranslateSelection } = await importBackground();
+
+    await handleTranslateSelection("Alpha");
+    await expect(handleTranslateSelection("Beta")).resolves.toEqual({
+      ok: true,
+      fromCache: false,
+      result: secondResult
+    });
+
+    expect(chrome.storage.local.set).toHaveBeenCalledTimes(2);
+    expect((storage.translationCache as TranslationCache).entries.map((entry) => entry.key)).toContain("beta::zh-CN");
+  });
+
   it.each([
     ["invalid-response" as const, "DeepSeek returned invalid JSON"],
     ["api-error" as const, "DeepSeek API failed"],
