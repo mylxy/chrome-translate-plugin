@@ -12,7 +12,9 @@ import type { ExtensionSettings, TranslateResponse, TranslationResult } from "..
 
 const BUBBLE_ID = "deepseek-selection-translate-bubble";
 const DEBOUNCE_MS = 220;
-const ESTIMATED_BUBBLE_SIZE = { width: 220, height: 220 };
+const MIN_ESTIMATED_BUBBLE_WIDTH = 220;
+const ESTIMATED_BUBBLE_HEIGHT = 220;
+const SELECTION_WIDTH_BUFFER = 96;
 const VIEWPORT_MARGIN = 8;
 const FAIL_MESSAGE = "翻译失败，请重新选择文本";
 const INSTALL_KEY = "__deepseekSelectionTranslateContentCleanup__";
@@ -44,6 +46,13 @@ function getBubble(): HTMLElement | null {
 
 function isUsableRect(rect: DOMRect): boolean {
   return !(rect.width === 0 && rect.height === 0);
+}
+
+function getEstimatedBubbleSize(selectionRect: DOMRect): { width: number; height: number } {
+  return {
+    width: Math.max(MIN_ESTIMATED_BUBBLE_WIDTH, Math.ceil(selectionRect.width + SELECTION_WIDTH_BUFFER)),
+    height: ESTIMATED_BUBBLE_HEIGHT,
+  };
 }
 
 function getSelectionState():
@@ -203,7 +212,7 @@ function handleSelectionChange(): void {
 
   const position = computeBubblePosition({
     selectionRect: selectionState.rect,
-    bubbleSize: ESTIMATED_BUBBLE_SIZE,
+    bubbleSize: getEstimatedBubbleSize(selectionState.rect),
     viewport: {
       width: window.innerWidth,
       height: window.innerHeight,

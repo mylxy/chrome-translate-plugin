@@ -179,6 +179,32 @@ describe("content selection translation flow", () => {
     expect(bubble?.textContent).toContain("描述");
   });
 
+  it("expands the bubble width budget for long selected text", async () => {
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      fromCache: false,
+      result: {
+        sourceText: "Understand unfamiliar codebases",
+        phonetic: "/ˌʌndərˈstænd ʌnˈfæmɪliər ˈkoʊdbeɪsɪz/",
+        translation: "理解不熟悉的代码库",
+      },
+    });
+
+    selectText("Understand unfamiliar codebases", {
+      top: 100,
+      bottom: 120,
+      left: 76,
+      width: 488,
+      height: 20,
+    });
+    await flushDebounce();
+    await Promise.resolve();
+
+    const bubble = document.querySelector<HTMLElement>(BUBBLE_SELECTOR);
+
+    expect(Number.parseInt(bubble?.style.maxWidth ?? "0", 10)).toBeGreaterThan(488);
+  });
+
   it("asks the background to play the source text when the play button is clicked", async () => {
     sendMessage
       .mockResolvedValueOnce({
