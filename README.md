@@ -27,19 +27,22 @@ npm run build
 3. 开启右上角的 Developer mode。
 4. 点击 Load unpacked。
 5. 选择项目生成的 `dist` 目录。
-6. 打开插件设置页，填写 DeepSeek API Key。
+6. 点击插件图标，填写 DeepSeek API Key，并按需要调整气泡文字大小。
 
 ## 第一版能力
 
 - 在普通网页中选中非中文文本后自动翻译。
 - 选中中文文本时直接忽略。
+- 选中后气泡立即显示原文和加载占位。
 - 翻译气泡优先显示在选区下方；下方空间不足时显示在上方。
 - 气泡展示原文、播放按钮、音标和译文。
-- 播放按钮使用浏览器 TTS 播放原文。
+- 播放按钮使用 Chrome TTS，并支持播放/停止切换。
+- DeepSeek API Key 和气泡字号通过插件 popup 配置。
+- 翻译目标语言固定为中文。
 - 本地最多缓存 100 条翻译结果。
-- 设置页支持填写 API Key、设置目标语言和清空缓存。
 
 ## 数据说明
 
 - DeepSeek API Key 保存在 Chrome local storage 中。
+- 气泡文字大小保存在 Chrome local storage 中，默认 12px。
 - 翻译缓存仅用于单词和短语，不用于长句或段落。
