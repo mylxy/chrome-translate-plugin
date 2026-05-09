@@ -2,7 +2,17 @@ import { addCacheEntry, findCacheEntry } from "../shared/cache";
 import { DeepSeekError, requestDeepSeekTranslation } from "../shared/deepseek";
 import { getSettings, getTranslationCache, saveTranslationCache } from "../shared/storage";
 import { shouldCacheSelection } from "../shared/text";
-import type { TranslateRequestMessage, TranslateResponse } from "../shared/types";
+import type { TargetLanguage, TranslateRequestMessage, TranslateResponse, TranslationResult } from "../shared/types";
+
+let cacheWriteQueue: Promise<void> = Promise.resolve();
+
+function enqueueCacheWrite(text: string, targetLanguage: TargetLanguage, result: TranslationResult): Promise<void> {
+  cacheWriteQueue = cacheWriteQueue.catch(() => undefined).then(async () => {
+    const latestCache = await getTranslationCache();
+    await saveTranslationCache(addCacheEntry(latestCache, text, targetLanguage, result));
+  });
+  return cacheWriteQueue;
+}
 
 export async function handleTranslateSelection(text: string): Promise<TranslateResponse> {
   try {
@@ -21,8 +31,7 @@ export async function handleTranslateSelection(text: string): Promise<TranslateR
 
     const result = await requestDeepSeekTranslation(apiKey, text, settings.targetLanguage);
     if (shouldCacheSelection(text)) {
-      const latestCache = await getTranslationCache();
-      await saveTranslationCache(addCacheEntry(latestCache, text, settings.targetLanguage, result));
+      await enqueueCacheWrite(text, settings.targetLanguage, result);
     }
 
     return { ok: true, fromCache: false, result };

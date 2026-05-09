@@ -123,6 +123,74 @@ describe("background translation handling", () => {
     expect(savedCache.entries.map((entry) => entry.key).sort()).toEqual(["alpha::zh-CN", "beta::zh-CN"]);
   });
 
+  it("preserves both entries when simultaneous cache writes reread the same stale snapshot", async () => {
+    installChromeStorageMock();
+    installChromeRuntimeMock();
+    const stored = {
+      apiKey: "sk-test",
+      targetLanguage: "zh-CN",
+      translationCache: emptyCache()
+    };
+    let cacheReadCount = 0;
+    const localStorage = chrome.storage.local as unknown as {
+      get: typeof chrome.storage.local.get;
+      set: typeof chrome.storage.local.set;
+    };
+    localStorage.get = vi.fn((keys: string[] | string | Record<string, unknown> | null, callback?: (items: Record<string, unknown>) => void) => {
+      if (!callback) return;
+
+      const keyList = Array.isArray(keys) ? keys : typeof keys === "string" ? [keys] : [];
+      if (keys === null || keyList.includes("apiKey") || keyList.includes("targetLanguage")) {
+        callback({ apiKey: stored.apiKey, targetLanguage: stored.targetLanguage });
+        return;
+      }
+
+      if (keyList.includes("translationCache")) {
+        cacheReadCount += 1;
+        const snapshot: TranslationCache = {
+          entries: stored.translationCache.entries.map((entry) => ({ ...entry }))
+        };
+
+        if (cacheReadCount <= 2) {
+          callback({ translationCache: snapshot });
+          return;
+        }
+
+        setTimeout(() => callback({ translationCache: snapshot }), 0);
+      }
+    }) as unknown as typeof chrome.storage.local.get;
+    localStorage.set = vi.fn((items: Record<string, unknown>, callback?: () => void) => {
+      if (items.translationCache) {
+        stored.translationCache = items.translationCache as TranslationCache;
+      }
+      callback?.();
+    }) as unknown as typeof chrome.storage.local.set;
+
+    const firstResult: TranslationResult = { sourceText: "Alpha", translation: "阿尔法" };
+    const secondResult: TranslationResult = { sourceText: "Beta", translation: "贝塔" };
+    let resolveFirst!: (result: TranslationResult) => void;
+    let resolveSecond!: (result: TranslationResult) => void;
+    requestDeepSeekTranslationMock
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveFirst = resolve;
+      }))
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveSecond = resolve;
+      }));
+    const { handleTranslateSelection } = await importBackground();
+
+    const firstTranslation = handleTranslateSelection("Alpha");
+    const secondTranslation = handleTranslateSelection("Beta");
+    await vi.waitFor(() => {
+      expect(requestDeepSeekTranslationMock).toHaveBeenCalledTimes(2);
+    });
+    resolveFirst(firstResult);
+    resolveSecond(secondResult);
+    await Promise.all([firstTranslation, secondTranslation]);
+
+    expect(stored.translationCache.entries.map((entry) => entry.key).sort()).toEqual(["alpha::zh-CN", "beta::zh-CN"]);
+  });
+
   it("does not save long sentence results to the translation cache", async () => {
     const storage = installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
     installChromeRuntimeMock();
