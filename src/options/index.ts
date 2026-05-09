@@ -2,16 +2,28 @@ import { clearTranslationCache, getSettings, saveSettings } from "../shared/stor
 
 const DEFAULT_TARGET_LANGUAGE = "zh-CN";
 
+const settingsForm = document.querySelector<HTMLFormElement>(".settings-form");
 const apiKeyInput = document.querySelector<HTMLInputElement>("#apiKey");
 const targetLanguageSelect = document.querySelector<HTMLSelectElement>("#targetLanguage");
 const saveButton = document.querySelector<HTMLButtonElement>("#save");
 const clearCacheButton = document.querySelector<HTMLButtonElement>("#clearCache");
 const statusElement = document.querySelector<HTMLElement>("#status");
+let isSaving = false;
 
 function setStatus(message: string): void {
   if (statusElement) {
     statusElement.textContent = message;
   }
+}
+
+function getAvailableTargetLanguage(value: string): string {
+  if (!targetLanguageSelect) {
+    return DEFAULT_TARGET_LANGUAGE;
+  }
+
+  return Array.from(targetLanguageSelect.options).some((option) => option.value === value)
+    ? value
+    : DEFAULT_TARGET_LANGUAGE;
 }
 
 export async function loadSettings(): Promise<void> {
@@ -22,15 +34,20 @@ export async function loadSettings(): Promise<void> {
   try {
     const settings = await getSettings();
     apiKeyInput.value = settings.apiKey;
-    targetLanguageSelect.value = settings.targetLanguage || DEFAULT_TARGET_LANGUAGE;
+    targetLanguageSelect.value = getAvailableTargetLanguage(settings.targetLanguage || DEFAULT_TARGET_LANGUAGE);
   } catch {
     setStatus("加载设置失败");
   }
 }
 
 async function handleSave(): Promise<void> {
-  if (!apiKeyInput || !targetLanguageSelect) {
+  if (!apiKeyInput || !targetLanguageSelect || isSaving) {
     return;
+  }
+
+  isSaving = true;
+  if (saveButton) {
+    saveButton.disabled = true;
   }
 
   try {
@@ -41,6 +58,11 @@ async function handleSave(): Promise<void> {
     setStatus("设置已保存");
   } catch {
     setStatus("保存失败");
+  } finally {
+    isSaving = false;
+    if (saveButton) {
+      saveButton.disabled = false;
+    }
   }
 }
 
@@ -53,7 +75,8 @@ async function handleClearCache(): Promise<void> {
   }
 }
 
-saveButton?.addEventListener("click", () => {
+settingsForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
   void handleSave();
 });
 
