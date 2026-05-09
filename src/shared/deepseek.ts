@@ -41,7 +41,7 @@ export function buildDeepSeekRequest(text: string, targetLanguage: TargetLanguag
       {
         role: "system",
         content:
-          "You translate selected text for a browser extension. Return valid JSON only with sourceText, phonetic, and translation. Do not explain. For English words and short phrases, include reliable phonetic transcription when possible. Leave phonetic empty when uncertain."
+          "You translate selected text for a browser extension. Return valid JSON only with sourceText, phonetic, and translation. Do not explain. For English words and short phrases, include IPA phonetic transcription wrapped in /.../ when possible. Never return Chinese pinyin, romanization, translation pronunciation, or target-language pronunciation in phonetic. Leave phonetic empty when IPA is unavailable or uncertain."
       },
       {
         role: "user",
@@ -50,7 +50,7 @@ export function buildDeepSeekRequest(text: string, targetLanguage: TargetLanguag
           targetLanguage,
           outputShape: {
             sourceText: "same original text",
-            phonetic: "phonetic transcription or empty string",
+            phonetic: "IPA transcription wrapped in /.../ or empty string; never pinyin",
             translation: "translated text"
           }
         })
@@ -129,6 +129,28 @@ function parseJsonContent(content: string): unknown {
   }
 }
 
+function isLikelyIpaPhonetic(value: string): boolean {
+  const trimmed = value.trim();
+  const wrappedInSlashes = /^\/[^/]+\/$/.test(trimmed);
+  const wrappedInBrackets = /^\[[^\]]+\]$/.test(trimmed);
+
+  if (!wrappedInSlashes && !wrappedInBrackets) {
+    return false;
+  }
+
+  if (/[\u3400-\u9fff]/.test(trimmed) || /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]/i.test(trimmed)) {
+    return false;
+  }
+
+  const inner = trimmed.slice(1, -1).trim();
+  const hasIpaMarker = /[ɑæɐɒʌɔəɚɛɜɝɞɪʊɡɣɤɥɦɫɬɭɮɯɰŋɲɳɴøœɶɹɻɽɾʀʁɕʂʃθðʈɖʒʔʰʲʷˈˌː]/.test(inner);
+  if (hasIpaMarker) {
+    return true;
+  }
+
+  return /^[a-z.'-]+$/i.test(inner);
+}
+
 export function parseDeepSeekResponse(payload: unknown): TranslationResult {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     throw invalidResponseError();
@@ -158,7 +180,7 @@ export function parseDeepSeekResponse(payload: unknown): TranslationResult {
     translation: result.translation
   };
 
-  if (typeof result.phonetic === "string" && result.phonetic.trim()) {
+  if (typeof result.phonetic === "string" && isLikelyIpaPhonetic(result.phonetic)) {
     translationResult.phonetic = result.phonetic.trim();
   }
 

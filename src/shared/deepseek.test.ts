@@ -12,6 +12,8 @@ describe("deepseek helpers", () => {
     expect(request.temperature).toBe(0.1);
     expect(request.response_format).toEqual({ type: "json_object" });
     expect(request.messages[0]?.role).toBe("system");
+    expect(request.messages[0]?.content).toContain("IPA");
+    expect(request.messages[0]?.content).toContain("Never return Chinese pinyin");
     expect(request.messages[1]?.content).toContain("Learning");
     expect(JSON.stringify(request)).toContain("phonetic");
 
@@ -19,7 +21,7 @@ describe("deepseek helpers", () => {
     expect(userContent.targetLanguage).toBe("zh-CN");
     expect(userContent.outputShape).toEqual({
       sourceText: "same original text",
-      phonetic: "phonetic transcription or empty string",
+      phonetic: "IPA transcription wrapped in /.../ or empty string; never pinyin",
       translation: "translated text"
     });
   });
@@ -47,6 +49,33 @@ describe("deepseek helpers", () => {
     });
     expect("phonetic" in result).toBe(false);
   });
+
+  it.each(["miáo shù", "miao shu", "/miao shu/"])(
+    "omits phonetic when DeepSeek returns Chinese pinyin %s",
+    (phonetic) => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                sourceText: "Describe",
+                phonetic,
+                translation: "描述"
+              })
+            }
+          }
+        ]
+      };
+
+      const result = parseDeepSeekResponse(response);
+
+      expect(result).toEqual({
+        sourceText: "Describe",
+        translation: "描述"
+      });
+      expect("phonetic" in result).toBe(false);
+    }
+  );
 
   it("parses JSON content wrapped in a code fence", () => {
     const response = {
