@@ -1,6 +1,7 @@
 import { clearTranslationCache, getSettings, saveSettings } from "../shared/storage";
 
 const DEFAULT_TARGET_LANGUAGE = "zh-CN";
+const DEFAULT_BUBBLE_FONT_SIZE = 12;
 
 const settingsForm = document.querySelector<HTMLFormElement>(".settings-form");
 const apiKeyInput = document.querySelector<HTMLInputElement>("#apiKey");
@@ -53,7 +54,8 @@ async function handleSave(): Promise<void> {
   try {
     await saveSettings({
       apiKey: apiKeyInput.value.trim(),
-      targetLanguage: targetLanguageSelect.value || DEFAULT_TARGET_LANGUAGE
+      targetLanguage: targetLanguageSelect.value || DEFAULT_TARGET_LANGUAGE,
+      bubbleFontSize: DEFAULT_BUBBLE_FONT_SIZE
     });
     setStatus("设置已保存");
   } catch {

@@ -14,12 +14,26 @@ describe("storage helpers", () => {
   });
 
   it("returns default settings when storage is empty", async () => {
-    await expect(getSettings()).resolves.toEqual({ apiKey: "", targetLanguage: "zh-CN" });
+    await expect(getSettings()).resolves.toEqual({ apiKey: "", targetLanguage: "zh-CN", bubbleFontSize: 12 });
   });
 
   it("saves and reads settings", async () => {
-    await saveSettings({ apiKey: "sk-test", targetLanguage: "en-US" });
-    await expect(getSettings()).resolves.toEqual({ apiKey: "sk-test", targetLanguage: "en-US" });
+    await saveSettings({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 16 });
+    await expect(getSettings()).resolves.toEqual({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 16 });
+  });
+
+  it.each([
+    ["too small", 8],
+    ["too large", 48],
+    ["not finite", Number.POSITIVE_INFINITY]
+  ])("falls back to 12px when stored bubble font size is %s", async (_label, bubbleFontSize) => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize });
+
+    await expect(getSettings()).resolves.toEqual({
+      apiKey: "sk-test",
+      targetLanguage: "zh-CN",
+      bubbleFontSize: 12
+    });
   });
 
   it("saves, reads, and clears cache", async () => {
@@ -38,7 +52,7 @@ describe("storage helpers", () => {
   it("rejects when saving storage fails", async () => {
     setChromeStorageError("set", "save failed");
 
-    await expect(saveSettings({ apiKey: "sk-test", targetLanguage: "en-US" })).rejects.toThrow("save failed");
+    await expect(saveSettings({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 })).rejects.toThrow("save failed");
   });
 
   it("rejects when removing storage fails", async () => {
@@ -56,7 +70,7 @@ describe("storage helpers", () => {
   it("rejects with fallback message when saving storage has lastError with empty message", async () => {
     setChromeStorageLastError("set", { message: "" });
 
-    await expect(saveSettings({ apiKey: "sk-test", targetLanguage: "en-US" })).rejects.toThrow(
+    await expect(saveSettings({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 })).rejects.toThrow(
       "Chrome storage operation failed"
     );
   });

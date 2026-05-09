@@ -2,7 +2,12 @@ import type { CacheEntry, ExtensionSettings, TranslationCache } from "./types";
 
 const API_KEY = "apiKey";
 const TARGET_LANGUAGE = "targetLanguage";
+const BUBBLE_FONT_SIZE = "bubbleFontSize";
 const TRANSLATION_CACHE = "translationCache";
+const DEFAULT_TARGET_LANGUAGE = "zh-CN";
+const DEFAULT_BUBBLE_FONT_SIZE = 12;
+const MIN_BUBBLE_FONT_SIZE = 12;
+const MAX_BUBBLE_FONT_SIZE = 20;
 
 function storageGet<T>(keys: string[]): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -44,17 +49,19 @@ function storageRemove(keys: string[]): Promise<void> {
 }
 
 export async function getSettings(): Promise<ExtensionSettings> {
-  const items = await storageGet<Partial<ExtensionSettings>>([API_KEY, TARGET_LANGUAGE]);
+  const items = await storageGet<Partial<ExtensionSettings>>([API_KEY, TARGET_LANGUAGE, BUBBLE_FONT_SIZE]);
   return {
     apiKey: typeof items.apiKey === "string" ? items.apiKey : "",
-    targetLanguage: typeof items.targetLanguage === "string" ? items.targetLanguage : "zh-CN"
+    targetLanguage: typeof items.targetLanguage === "string" ? items.targetLanguage : DEFAULT_TARGET_LANGUAGE,
+    bubbleFontSize: cleanBubbleFontSize(items.bubbleFontSize)
   };
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {
   await storageSet({
     [API_KEY]: settings.apiKey,
-    [TARGET_LANGUAGE]: settings.targetLanguage
+    [TARGET_LANGUAGE]: DEFAULT_TARGET_LANGUAGE,
+    [BUBBLE_FONT_SIZE]: cleanBubbleFontSize(settings.bubbleFontSize)
   });
 }
 
@@ -77,6 +84,19 @@ export async function saveTranslationCache(cache: TranslationCache): Promise<voi
 
 export async function clearTranslationCache(): Promise<void> {
   await storageRemove([TRANSLATION_CACHE]);
+}
+
+function cleanBubbleFontSize(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < MIN_BUBBLE_FONT_SIZE ||
+    value > MAX_BUBBLE_FONT_SIZE
+  ) {
+    return DEFAULT_BUBBLE_FONT_SIZE;
+  }
+
+  return Math.round(value);
 }
 
 function cleanCacheEntry(entry: unknown): CacheEntry | undefined {

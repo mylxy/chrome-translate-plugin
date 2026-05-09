@@ -48,7 +48,7 @@ describe("options page", () => {
     vi.resetModules();
     vi.resetAllMocks();
     document.body.innerHTML = optionsHtml;
-    vi.mocked(getSettings).mockResolvedValue({ apiKey: "sk-saved", targetLanguage: "en-US" });
+    vi.mocked(getSettings).mockResolvedValue({ apiKey: "sk-saved", targetLanguage: "en-US", bubbleFontSize: 12 });
     vi.mocked(saveSettings).mockResolvedValue();
     vi.mocked(clearTranslationCache).mockResolvedValue();
   });
@@ -61,7 +61,7 @@ describe("options page", () => {
   });
 
   it("falls back to zh-CN when saved target language is not an available option", async () => {
-    vi.mocked(getSettings).mockResolvedValue({ apiKey: "sk-saved", targetLanguage: "fr-FR" });
+    vi.mocked(getSettings).mockResolvedValue({ apiKey: "sk-saved", targetLanguage: "fr-FR", bubbleFontSize: 12 });
 
     await loadOptionsPage();
 
@@ -76,7 +76,7 @@ describe("options page", () => {
     submitForm();
 
     await vi.waitFor(() =>
-      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-new", targetLanguage: "ja-JP" })
+      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-new", targetLanguage: "ja-JP", bubbleFontSize: 12 })
     );
     expect(document.querySelector("#status")?.textContent).toBe("设置已保存");
   });
@@ -88,7 +88,7 @@ describe("options page", () => {
     submitForm();
 
     await vi.waitFor(() =>
-      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-saved", targetLanguage: "zh-CN" })
+      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-saved", targetLanguage: "zh-CN", bubbleFontSize: 12 })
     );
   });
 
@@ -99,7 +99,7 @@ describe("options page", () => {
 
     expect(wasNotPrevented).toBe(false);
     await vi.waitFor(() =>
-      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-saved", targetLanguage: "en-US" })
+      expect(saveSettings).toHaveBeenCalledWith({ apiKey: "sk-saved", targetLanguage: "en-US", bubbleFontSize: 12 })
     );
   });
 

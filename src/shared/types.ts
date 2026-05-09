@@ -3,6 +3,7 @@ export type TargetLanguage = "zh-CN" | string;
 export interface ExtensionSettings {
   apiKey: string;
   targetLanguage: TargetLanguage;
+  bubbleFontSize: number;
 }
 
 export interface TranslationResult {
