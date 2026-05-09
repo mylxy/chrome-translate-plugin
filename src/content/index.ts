@@ -69,6 +69,20 @@ function openOptions(): void {
   }
 }
 
+function speakSource(sourceText: string): void {
+  try {
+    const maybePromise = chrome.runtime.sendMessage({
+      type: "speak-source",
+      text: sourceText,
+    });
+    if (maybePromise && typeof maybePromise.catch === "function") {
+      maybePromise.catch(() => undefined);
+    }
+  } catch {
+    // Text-to-speech is best effort from the content script.
+  }
+}
+
 async function requestTranslation(
   text: string,
   currentRequestId: number,
@@ -83,7 +97,7 @@ async function requestTranslation(
     if (currentRequestId !== requestId) return;
 
     if (response.ok) {
-      renderTranslationBubble({ result: response.result, position });
+      renderTranslationBubble({ result: response.result, position, speakSource });
       return;
     }
 

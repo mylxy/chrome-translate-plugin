@@ -29,7 +29,12 @@ export interface OpenOptionsMessage {
   type: "open-options";
 }
 
-export type RuntimeMessage = TranslateRequestMessage | OpenOptionsMessage;
+export interface SpeakSourceMessage {
+  type: "speak-source";
+  text: string;
+}
+
+export type RuntimeMessage = TranslateRequestMessage | OpenOptionsMessage | SpeakSourceMessage;
 
 export interface TranslateSuccessResponse {
   ok: true;

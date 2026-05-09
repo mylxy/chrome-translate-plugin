@@ -4,6 +4,7 @@ import { getSettings, getTranslationCache, saveTranslationCache } from "../share
 import { shouldCacheSelection } from "../shared/text";
 import type {
   OpenOptionsMessage,
+  SpeakSourceMessage,
   TargetLanguage,
   TranslateRequestMessage,
   TranslateResponse,
@@ -71,6 +72,16 @@ function isOpenOptionsMessage(message: unknown): message is OpenOptionsMessage {
   );
 }
 
+function isSpeakSourceMessage(message: unknown): message is SpeakSourceMessage {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message as Partial<SpeakSourceMessage>).type === "speak-source" &&
+    typeof (message as Partial<SpeakSourceMessage>).text === "string" &&
+    (message as Partial<SpeakSourceMessage>).text!.trim().length > 0
+  );
+}
+
 function openOptionsPage(): void {
   try {
     const maybePromise = chrome.runtime.openOptionsPage?.();
@@ -82,12 +93,29 @@ function openOptionsPage(): void {
   }
 }
 
+function speakSourceText(text: string): void {
+  try {
+    chrome.tts?.stop?.();
+    chrome.tts?.speak?.(text, {
+      enqueue: false,
+      rate: 1
+    });
+  } catch {
+    // Browser TTS is best effort from the background listener.
+  }
+}
+
 export function createTranslateSelectionListener(
   translateSelection: (text: string) => Promise<TranslateResponse> = handleTranslateSelection
 ) {
   return (message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response: TranslateResponse) => void) => {
     if (isOpenOptionsMessage(message)) {
       openOptionsPage();
+      return false;
+    }
+
+    if (isSpeakSourceMessage(message)) {
+      speakSourceText(message.text);
       return false;
     }
 

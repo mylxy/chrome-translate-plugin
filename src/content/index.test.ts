@@ -113,6 +113,31 @@ describe("content selection translation flow", () => {
     );
   });
 
+  it("asks the background to play the source text when the play button is clicked", async () => {
+    sendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        fromCache: false,
+        result: {
+          sourceText: "Hello world",
+          translation: "你好，世界",
+        },
+      })
+      .mockResolvedValueOnce(undefined as unknown as TranslateResponse);
+
+    selectText("Hello world");
+    await flushDebounce();
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>(".dst-play")?.click();
+    await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: "speak-source",
+      text: "Hello world",
+    });
+  });
+
   it("does not send before the debounce delay elapses", async () => {
     sendMessage.mockResolvedValue({
       ok: true,

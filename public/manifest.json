@@ -3,7 +3,7 @@
   "name": "DeepSeek 划词翻译",
   "version": "0.1.0",
   "description": "选中非中文文本后，使用 DeepSeek Flash 显示紧凑翻译气泡。",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tts"],
   "host_permissions": ["https://api.deepseek.com/*"],
   "background": {
     "service_worker": "assets/background.js",

@@ -186,4 +186,22 @@ describe("bubble renderer", () => {
     expect(play?.getAttribute("aria-label")).toBe("播放原文");
     expect(() => play?.click()).not.toThrow();
   });
+
+  it("uses a provided source playback handler when browser TTS is unavailable", () => {
+    vi.stubGlobal("speechSynthesis", undefined);
+    vi.stubGlobal("SpeechSynthesisUtterance", undefined);
+    const speakSource = vi.fn();
+
+    renderTranslationBubble({
+      result: { sourceText: "Learning", translation: "学习" },
+      position,
+      speakSource,
+    });
+
+    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+
+    expect(play?.disabled).toBe(false);
+    play?.click();
+    expect(speakSource).toHaveBeenCalledWith("Learning");
+  });
 });

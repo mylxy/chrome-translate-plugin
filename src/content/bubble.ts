@@ -7,6 +7,7 @@ const STYLE_ID = "deepseek-selection-translate-style";
 interface RenderTranslationInput {
   result: TranslationResult;
   position: BubblePosition;
+  speakSource?: (sourceText: string) => void | Promise<void>;
 }
 
 interface RenderSetupInput {
@@ -172,9 +173,14 @@ export function renderTranslationBubble(input: RenderTranslationInput): void {
   play.type = "button";
   play.title = "播放原文";
   play.setAttribute("aria-label", "播放原文");
-  play.disabled = !canSpeakSourceText();
+  play.disabled = !input.speakSource && !canSpeakSourceText();
   play.textContent = "▶";
   play.addEventListener("click", () => {
+    if (input.speakSource) {
+      void Promise.resolve(input.speakSource(input.result.sourceText)).catch(() => undefined);
+      return;
+    }
+
     speakSourceText(input.result.sourceText);
   });
 

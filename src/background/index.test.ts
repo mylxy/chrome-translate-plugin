@@ -314,6 +314,28 @@ describe("background translation handling", () => {
     expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
   });
 
+  it("plays source text through Chrome TTS for speak-source runtime messages", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    const runtime = installChromeRuntimeMock();
+    chrome.tts = {
+      stop: vi.fn(),
+      speak: vi.fn()
+    } as unknown as typeof chrome.tts;
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    const sendResponse = vi.fn();
+
+    expect(listener?.({ type: "speak-source", text: "Learning" }, {}, sendResponse)).toBe(false);
+    expect(chrome.tts.stop).toHaveBeenCalledTimes(1);
+    expect(chrome.tts.speak).toHaveBeenCalledWith("Learning", {
+      enqueue: false,
+      rate: 1
+    });
+    expect(sendResponse).not.toHaveBeenCalled();
+    expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+  });
+
   it("ignores runtime messages that are not supported requests", async () => {
     installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
     const runtime = installChromeRuntimeMock();
