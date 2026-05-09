@@ -156,6 +156,29 @@ describe("content selection translation flow", () => {
     expect(document.querySelector<HTMLElement>(BUBBLE_SELECTOR)?.style.getPropertyValue("--dst-font-size")).toBe("18px");
   });
 
+  it("allows enough bubble height for 16px source, phonetic, and translation text", async () => {
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      fromCache: false,
+      result: {
+        sourceText: "Describe",
+        phonetic: "/dɪˈskraɪb/",
+        translation: "描述",
+      },
+    });
+    installChrome(sendMessage, { apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 16 });
+    await importContentScript();
+
+    selectText("Describe");
+    await flushDebounce();
+    await Promise.resolve();
+
+    const bubble = document.querySelector<HTMLElement>(BUBBLE_SELECTOR);
+
+    expect(Number.parseInt(bubble?.style.maxHeight ?? "0", 10)).toBeGreaterThanOrEqual(170);
+    expect(bubble?.textContent).toContain("描述");
+  });
+
   it("asks the background to play the source text when the play button is clicked", async () => {
     sendMessage
       .mockResolvedValueOnce({

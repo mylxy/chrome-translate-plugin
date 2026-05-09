@@ -12,7 +12,7 @@ import type { ExtensionSettings, TranslateResponse, TranslationResult } from "..
 
 const BUBBLE_ID = "deepseek-selection-translate-bubble";
 const DEBOUNCE_MS = 220;
-const ESTIMATED_BUBBLE_SIZE = { width: 220, height: 96 };
+const ESTIMATED_BUBBLE_SIZE = { width: 220, height: 220 };
 const VIEWPORT_MARGIN = 8;
 const FAIL_MESSAGE = "翻译失败，请重新选择文本";
 const INSTALL_KEY = "__deepseekSelectionTranslateContentCleanup__";
