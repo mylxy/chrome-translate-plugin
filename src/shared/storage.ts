@@ -1,24 +1,45 @@
-import type { ExtensionSettings, TranslationCache } from "./types";
+import type { CacheEntry, ExtensionSettings, TranslationCache } from "./types";
 
 const API_KEY = "apiKey";
 const TARGET_LANGUAGE = "targetLanguage";
 const TRANSLATION_CACHE = "translationCache";
 
 function storageGet<T>(keys: string[]): Promise<T> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(keys, (items) => resolve(items as T));
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (items) => {
+      const message = chrome.runtime.lastError?.message;
+      if (message) {
+        reject(new Error(message));
+        return;
+      }
+      resolve(items as T);
+    });
   });
 }
 
 function storageSet(items: Record<string, unknown>): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(items, () => resolve());
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(items, () => {
+      const message = chrome.runtime.lastError?.message;
+      if (message) {
+        reject(new Error(message));
+        return;
+      }
+      resolve();
+    });
   });
 }
 
 function storageRemove(keys: string[]): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.remove(keys, () => resolve());
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.remove(keys, () => {
+      const message = chrome.runtime.lastError?.message;
+      if (message) {
+        reject(new Error(message));
+        return;
+      }
+      resolve();
+    });
   });
 }
 
@@ -42,7 +63,12 @@ export async function getTranslationCache(): Promise<TranslationCache> {
   if (!items.translationCache || !Array.isArray(items.translationCache.entries)) {
     return { entries: [] };
   }
-  return items.translationCache;
+  return {
+    entries: items.translationCache.entries.flatMap((entry) => {
+      const cleanEntry = cleanCacheEntry(entry);
+      return cleanEntry ? [cleanEntry] : [];
+    })
+  };
 }
 
 export async function saveTranslationCache(cache: TranslationCache): Promise<void> {
@@ -51,4 +77,35 @@ export async function saveTranslationCache(cache: TranslationCache): Promise<voi
 
 export async function clearTranslationCache(): Promise<void> {
   await storageRemove([TRANSLATION_CACHE]);
+}
+
+function cleanCacheEntry(entry: unknown): CacheEntry | undefined {
+  if (!entry || typeof entry !== "object") {
+    return undefined;
+  }
+
+  const candidate = entry as Partial<Record<keyof CacheEntry, unknown>>;
+  if (
+    typeof candidate.key !== "string" ||
+    typeof candidate.sourceText !== "string" ||
+    typeof candidate.translation !== "string" ||
+    typeof candidate.createdAt !== "number" ||
+    !Number.isFinite(candidate.createdAt) ||
+    (candidate.phonetic !== undefined && typeof candidate.phonetic !== "string")
+  ) {
+    return undefined;
+  }
+
+  const cleanEntry: CacheEntry = {
+    key: candidate.key,
+    sourceText: candidate.sourceText,
+    translation: candidate.translation,
+    createdAt: candidate.createdAt
+  };
+
+  if (typeof candidate.phonetic === "string") {
+    cleanEntry.phonetic = candidate.phonetic;
+  }
+
+  return cleanEntry;
 }
