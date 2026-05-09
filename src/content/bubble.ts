@@ -42,7 +42,7 @@ function ensureStyles(): void {
       max-width: var(--dst-max-width);
       max-height: var(--dst-max-height);
       overflow: auto;
-      padding: 10px 12px;
+      padding: var(--dst-padding-y) var(--dst-padding-x);
       border: 1px solid #d8dee8;
       border-radius: 8px;
       background: #ffffff;
@@ -82,8 +82,11 @@ function ensureStyles(): void {
       background: #111827;
       color: #ffffff;
       cursor: pointer;
+      display: grid;
+      place-items: center;
       font-size: 11px;
       line-height: 1;
+      white-space: nowrap;
     }
 
     #deepseek-selection-translate-bubble .dst-control:hover {
@@ -127,6 +130,12 @@ function ensureStyles(): void {
       width: 130px;
     }
 
+    #deepseek-selection-translate-bubble .dst-loading-dots {
+      display: inline-block;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
     #deepseek-selection-translate-bubble.dst-setup {
       display: grid;
       gap: 8px;
@@ -156,6 +165,17 @@ function getBubbleFontSize(value: number | undefined): number {
     : DEFAULT_BUBBLE_FONT_SIZE;
 }
 
+function getBubblePadding(fontSize: number): { x: number; y: number } {
+  return {
+    x: Math.max(12, Math.round(fontSize)),
+    y: Math.max(10, Math.round(fontSize * 0.85)),
+  };
+}
+
+function getBubbleMinWidth(fontSize: number, maxWidth: number): number {
+  return Math.min(Math.max(180, fontSize * 12), maxWidth);
+}
+
 function createBubble(
   position: BubblePosition,
   bubbleFontSize = DEFAULT_BUBBLE_FONT_SIZE,
@@ -166,8 +186,9 @@ function createBubble(
   const bubble = document.createElement("div");
   const maxWidth = `${position.maxWidth}px`;
   const maxHeight = `${position.maxHeight}px`;
-  const minWidth = `${Math.min(150, position.maxWidth)}px`;
   const fontSize = getBubbleFontSize(bubbleFontSize);
+  const padding = getBubblePadding(fontSize);
+  const minWidth = `${getBubbleMinWidth(fontSize, position.maxWidth)}px`;
 
   bubble.id = BUBBLE_ID;
   bubble.className = `dst-bubble dst-${position.placement}`;
@@ -178,6 +199,8 @@ function createBubble(
   bubble.style.setProperty("--dst-min-width", minWidth);
   bubble.style.setProperty("--dst-font-size", `${fontSize}px`);
   bubble.style.setProperty("--dst-font-size-value", String(fontSize));
+  bubble.style.setProperty("--dst-padding-y", `${padding.y}px`);
+  bubble.style.setProperty("--dst-padding-x", `${padding.x}px`);
   bubble.style.minWidth = minWidth;
   bubble.style.maxWidth = maxWidth;
   bubble.style.maxHeight = maxHeight;
@@ -241,7 +264,11 @@ export function renderLoadingBubble(input: RenderLoadingInput): void {
   const bubble = createBubble(input.position, input.bubbleFontSize);
   const { grid, controlCell } = createGrid(input.sourceText);
 
-  const loading = createControl("翻译中", "•••");
+  const loading = createControl("翻译中", "");
+  const dots = document.createElement("span");
+  dots.className = "dst-loading-dots";
+  dots.textContent = "•••";
+  loading.append(dots);
   loading.disabled = true;
   controlCell.append(loading);
 

@@ -79,6 +79,58 @@ describe("bubble renderer", () => {
     expect(bubble?.style.getPropertyValue("--dst-font-size")).toBe("16px");
   });
 
+  it("sets padding variables from the configured font size", () => {
+    renderTranslationBubble({
+      result: { sourceText: "Learning", translation: "学习" },
+      position,
+      bubbleFontSize: 20,
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+
+    expect(bubble?.style.getPropertyValue("--dst-padding-y")).toBe("17px");
+    expect(bubble?.style.getPropertyValue("--dst-padding-x")).toBe("20px");
+  });
+
+  it("uses a readable minimum width without exceeding the available max width", () => {
+    renderTranslationBubble({
+      result: { sourceText: "A", translation: "一个" },
+      position,
+      bubbleFontSize: 12,
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+
+    expect(bubble?.style.getPropertyValue("--dst-min-width")).toBe("180px");
+    expect(bubble?.style.minWidth).toBe("180px");
+  });
+
+  it("caps the readable minimum width at the available max width", () => {
+    renderTranslationBubble({
+      result: { sourceText: "A", translation: "一个" },
+      position: { ...position, maxWidth: 84 },
+      bubbleFontSize: 12,
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+
+    expect(bubble?.style.getPropertyValue("--dst-min-width")).toBe("84px");
+    expect(bubble?.style.minWidth).toBe("84px");
+  });
+
+  it("renders loading dots as a non-wrapping inline element", () => {
+    renderLoadingBubble({
+      sourceText: "Learning",
+      position,
+      bubbleFontSize: 12,
+    });
+
+    const dots = document.querySelector<HTMLElement>(".dst-loading-dots");
+
+    expect(dots?.textContent).toBe("•••");
+    expect(dots?.className).toContain("dst-loading-dots");
+  });
+
   it("renders a ready bubble with configured font size and a right aligned play control", () => {
     const speakSource = vi.fn();
 
