@@ -2,6 +2,23 @@ import type { TargetLanguage, TranslationResult } from "./types";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-v4-flash";
+const INVALID_RESPONSE_MESSAGE = "DeepSeek returned an invalid response";
+
+export type DeepSeekErrorCode = "api-error" | "invalid-response" | "network-error";
+
+export class DeepSeekError extends Error {
+  code: DeepSeekErrorCode;
+  status?: number;
+
+  constructor(code: DeepSeekErrorCode, message: string, status?: number) {
+    super(message);
+    this.name = "DeepSeekError";
+    this.code = code;
+    if (typeof status === "number") {
+      this.status = status;
+    }
+  }
+}
 
 interface DeepSeekMessage {
   role: "system" | "user";
@@ -42,17 +59,89 @@ export function buildDeepSeekRequest(text: string, targetLanguage: TargetLanguag
   };
 }
 
-export function parseDeepSeekResponse(payload: unknown): TranslationResult {
-  const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-  if (typeof content !== "string") {
-    throw new Error("DeepSeek returned an invalid response");
+function invalidResponseError(): DeepSeekError {
+  return new DeepSeekError("invalid-response", INVALID_RESPONSE_MESSAGE);
+}
+
+function extractFirstJsonObject(text: string): string | undefined {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return undefined;
   }
 
-  let parsed: unknown;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, index + 1);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = (fenced?.[1] ?? trimmed).trim();
+
   try {
-    parsed = JSON.parse(content);
+    return JSON.parse(candidate);
   } catch {
-    throw new Error("DeepSeek returned an invalid response");
+    const extracted = extractFirstJsonObject(candidate);
+    if (!extracted) {
+      throw invalidResponseError();
+    }
+
+    try {
+      return JSON.parse(extracted);
+    } catch {
+      throw invalidResponseError();
+    }
+  }
+}
+
+export function parseDeepSeekResponse(payload: unknown): TranslationResult {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    throw invalidResponseError();
+  }
+
+  const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
+  if (typeof content !== "string") {
+    throw invalidResponseError();
+  }
+
+  const parsed = parseJsonContent(content);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw invalidResponseError();
   }
 
   const result = parsed as Partial<TranslationResult>;
@@ -61,7 +150,7 @@ export function parseDeepSeekResponse(payload: unknown): TranslationResult {
     typeof result.translation !== "string" ||
     result.translation.trim() === ""
   ) {
-    throw new Error("DeepSeek returned an invalid response");
+    throw invalidResponseError();
   }
 
   const translationResult: TranslationResult = {
@@ -81,18 +170,30 @@ export async function requestDeepSeekTranslation(
   text: string,
   targetLanguage: TargetLanguage
 ): Promise<TranslationResult> {
-  const response = await fetch(DEEPSEEK_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(buildDeepSeekRequest(text, targetLanguage))
-  });
-
-  if (!response.ok) {
-    throw new Error(`DeepSeek API failed with status ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(DEEPSEEK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(buildDeepSeekRequest(text, targetLanguage))
+    });
+  } catch {
+    throw new DeepSeekError("network-error", "DeepSeek request failed");
   }
 
-  return parseDeepSeekResponse(await response.json());
+  if (!response.ok) {
+    throw new DeepSeekError("api-error", `DeepSeek API failed with status ${response.status}`, response.status);
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw invalidResponseError();
+  }
+
+  return parseDeepSeekResponse(payload);
 }
