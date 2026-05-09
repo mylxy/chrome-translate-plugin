@@ -1,7 +1,7 @@
 import { normalizeCacheText } from "./text";
 import type { CacheEntry, TargetLanguage, TranslationCache, TranslationResult } from "./types";
 
-const MAX_CACHE_ENTRIES = 100;
+export const MAX_CACHE_ENTRIES = 100;
 
 export function emptyCache(): TranslationCache {
   return { entries: [] };
@@ -28,9 +28,11 @@ export function addCacheEntry(
   createdAt: number = Date.now()
 ): TranslationCache {
   const key = createCacheKey(text, targetLanguage);
+  const existingIndex = cache.entries.findIndex((entry) => entry.key === key);
+  const createdAtForEntry = existingIndex >= 0 ? cache.entries[existingIndex]!.createdAt : createdAt;
   const nextEntry: CacheEntry = {
     key,
-    createdAt,
+    createdAt: createdAtForEntry,
     sourceText: result.sourceText,
     translation: result.translation
   };
@@ -38,7 +40,12 @@ export function addCacheEntry(
     nextEntry.phonetic = result.phonetic;
   }
 
-  const withoutExisting = cache.entries.filter((entry) => entry.key !== key);
-  const nextEntries = [...withoutExisting, nextEntry];
+  if (existingIndex >= 0) {
+    const nextEntries = [...cache.entries];
+    nextEntries[existingIndex] = nextEntry;
+    return { entries: nextEntries };
+  }
+
+  const nextEntries = [...cache.entries, nextEntry];
   return { entries: nextEntries.slice(Math.max(0, nextEntries.length - MAX_CACHE_ENTRIES)) };
 }
