@@ -107,6 +107,23 @@ function stopSpeaking(): void {
   rerenderCurrentTranslation();
 }
 
+function isSpeakingEndedMessage(message: unknown): message is { type: "speaking-ended" } {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message as { type?: unknown }).type === "speaking-ended"
+  );
+}
+
+function handleRuntimeMessage(message: unknown): void {
+  if (!isSpeakingEndedMessage(message) || !isSpeaking) {
+    return;
+  }
+
+  isSpeaking = false;
+  rerenderCurrentTranslation();
+}
+
 async function renderLoadingForSelection(
   text: string,
   currentRequestId: number,
@@ -224,12 +241,14 @@ function install(): () => void {
   document.addEventListener("selectionchange", handleSelectionChange);
   document.addEventListener("keydown", handleKeydown);
   document.addEventListener("mousedown", handleMouseDown);
+  chrome.runtime.onMessage?.addListener?.(handleRuntimeMessage);
 
   return () => {
     closeBubble();
     document.removeEventListener("selectionchange", handleSelectionChange);
     document.removeEventListener("keydown", handleKeydown);
     document.removeEventListener("mousedown", handleMouseDown);
+    chrome.runtime.onMessage?.removeListener?.(handleRuntimeMessage);
   };
 }
 

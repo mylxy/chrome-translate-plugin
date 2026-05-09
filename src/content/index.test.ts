@@ -5,6 +5,7 @@ import type { ExtensionSettings, TranslateResponse } from "../shared/types";
 const BUBBLE_SELECTOR = "#deepseek-selection-translate-bubble";
 
 type SendMessageMock = Mock<(message: unknown) => Promise<TranslateResponse>>;
+const runtimeListeners: Array<(message: unknown) => void> = [];
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -32,9 +33,19 @@ function installChrome(
   sendMessage: SendMessageMock,
   settings: ExtensionSettings = { apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 },
 ) {
+  runtimeListeners.length = 0;
   vi.stubGlobal("chrome", {
     runtime: {
       sendMessage,
+      onMessage: {
+        addListener: vi.fn((listener: (message: unknown) => void) => {
+          runtimeListeners.push(listener);
+        }),
+        removeListener: vi.fn((listener: (message: unknown) => void) => {
+          const index = runtimeListeners.indexOf(listener);
+          if (index >= 0) runtimeListeners.splice(index, 1);
+        }),
+      },
     },
     storage: {
       local: {
@@ -198,6 +209,37 @@ describe("content selection translation flow", () => {
 
     expect(sendMessage).toHaveBeenCalledWith({ type: "stop-speaking" });
     expect(document.querySelector(".dst-control")?.textContent).toBe("▶");
+  });
+
+  it("restores the play button when the background reports speaking ended", async () => {
+    sendMessage
+      .mockResolvedValueOnce({
+        ok: true,
+        fromCache: false,
+        result: { sourceText: "Hello world", translation: "你好，世界" },
+      })
+      .mockResolvedValueOnce(undefined as unknown as TranslateResponse);
+
+    selectText("Hello world");
+    await flushDebounce();
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>(".dst-control")?.click();
+    await Promise.resolve();
+    expect(document.querySelector(".dst-control")?.textContent).toBe("Ⅱ");
+
+    runtimeListeners[0]?.({ type: "speaking-ended" });
+
+    expect(document.querySelector(".dst-control")?.textContent).toBe("▶");
+  });
+
+  it("removes the background message listener during content cleanup", async () => {
+    expect(runtimeListeners).toHaveLength(1);
+
+    await importContentScript();
+
+    expect(chrome.runtime.onMessage.removeListener).toHaveBeenCalled();
+    expect(runtimeListeners).toHaveLength(1);
   });
 
   it("does not send before the debounce delay elapses", async () => {
