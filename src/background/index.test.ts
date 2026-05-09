@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addCacheEntry, emptyCache } from "../shared/cache";
 import { DeepSeekError } from "../shared/deepseek";
-import type { TranslateRequestMessage, TranslationResult } from "../shared/types";
-import { installChromeStorageMock } from "../test/chromeMock";
+import type { TranslationCache, TranslationResult } from "../shared/types";
+import { installChromeRuntimeMock, installChromeStorageMock, setChromeStorageError } from "../test/chromeMock";
 
 const { requestDeepSeekTranslationMock } = vi.hoisted(() => ({
   requestDeepSeekTranslationMock: vi.fn()
@@ -15,32 +15,6 @@ vi.mock("../shared/deepseek", async (importOriginal) => {
     requestDeepSeekTranslation: requestDeepSeekTranslationMock
   };
 });
-
-type MessageListener = (
-  message: TranslateRequestMessage | { type: string; text?: string },
-  sender: chrome.runtime.MessageSender,
-  sendResponse: (response?: unknown) => void
-) => boolean | undefined;
-
-function installChromeRuntimeMock(): { listeners: MessageListener[] } {
-  const listeners: MessageListener[] = [];
-
-  const currentChrome = globalThis.chrome as Partial<typeof chrome> | undefined;
-  globalThis.chrome = {
-    ...currentChrome,
-    runtime: {
-      ...(currentChrome?.runtime ?? {}),
-      lastError: undefined,
-      onMessage: {
-        addListener: vi.fn((listener: MessageListener) => {
-          listeners.push(listener);
-        })
-      }
-    }
-  } as unknown as typeof chrome;
-
-  return { listeners };
-}
 
 async function importBackground(): Promise<typeof import("./index")> {
   return import("./index");
@@ -119,6 +93,36 @@ describe("background translation handling", () => {
     });
   });
 
+  it("merges concurrent short phrase cache writes with the latest stored cache", async () => {
+    const storage = installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    installChromeRuntimeMock();
+    const firstResult: TranslationResult = { sourceText: "Alpha", translation: "阿尔法" };
+    const secondResult: TranslationResult = { sourceText: "Beta", translation: "贝塔" };
+    let resolveFirst!: (result: TranslationResult) => void;
+    let resolveSecond!: (result: TranslationResult) => void;
+    requestDeepSeekTranslationMock
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveFirst = resolve;
+      }))
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveSecond = resolve;
+      }));
+    const { handleTranslateSelection } = await importBackground();
+
+    const firstTranslation = handleTranslateSelection("Alpha");
+    const secondTranslation = handleTranslateSelection("Beta");
+    await vi.waitFor(() => {
+      expect(requestDeepSeekTranslationMock).toHaveBeenCalledTimes(2);
+    });
+    resolveFirst(firstResult);
+    await firstTranslation;
+    resolveSecond(secondResult);
+    await secondTranslation;
+
+    const savedCache = storage.translationCache as TranslationCache;
+    expect(savedCache.entries.map((entry) => entry.key).sort()).toEqual(["alpha::zh-CN", "beta::zh-CN"]);
+  });
+
   it("does not save long sentence results to the translation cache", async () => {
     const storage = installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
     installChromeRuntimeMock();
@@ -187,6 +191,74 @@ describe("background translation handling", () => {
         ok: true,
         fromCache: false,
         result
+      });
+    });
+  });
+
+  it("ignores runtime messages that are not translate-selection requests", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    const runtime = installChromeRuntimeMock();
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    const sendResponse = vi.fn();
+
+    expect(listener?.({ type: "open-options" }, {}, sendResponse)).toBe(false);
+    expect(sendResponse).not.toHaveBeenCalled();
+    expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+  });
+
+  it.each([null, undefined, "translate-selection", 42, { type: "translate-selection" }, { type: "translate-selection", text: 42 }])(
+    "ignores invalid runtime translate messages %#",
+    async (message) => {
+      installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+      const runtime = installChromeRuntimeMock();
+      await importBackground();
+
+      const listener = runtime.listeners[0];
+      const sendResponse = vi.fn();
+
+      expect(listener?.(message, {}, sendResponse)).toBe(false);
+      expect(sendResponse).not.toHaveBeenCalled();
+      expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("sends a generic error response when the listener translation path fails", async () => {
+    installChromeStorageMock();
+    installChromeRuntimeMock();
+    const { createTranslateSelectionListener } = await importBackground();
+    const listener = createTranslateSelectionListener(async () => Promise.reject(new Error("boom")));
+
+    const sendResponse = vi.fn();
+    const returnValue = listener({ type: "translate-selection", text: "Learning" }, {}, sendResponse);
+
+    expect(returnValue).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        code: "network-error",
+        message: "翻译失败"
+      });
+    });
+  });
+
+  it("sends a generic error response when storage fails during runtime handling", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    setChromeStorageError("get", "storage offline");
+    const runtime = installChromeRuntimeMock();
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    const sendResponse = vi.fn();
+    const returnValue = listener?.({ type: "translate-selection", text: "Learning" }, {}, sendResponse);
+
+    expect(returnValue).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: false,
+        code: "network-error",
+        message: "翻译失败"
       });
     });
   });

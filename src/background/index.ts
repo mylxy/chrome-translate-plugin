@@ -21,7 +21,8 @@ export async function handleTranslateSelection(text: string): Promise<TranslateR
 
     const result = await requestDeepSeekTranslation(apiKey, text, settings.targetLanguage);
     if (shouldCacheSelection(text)) {
-      await saveTranslationCache(addCacheEntry(cache, text, settings.targetLanguage, result));
+      const latestCache = await getTranslationCache();
+      await saveTranslationCache(addCacheEntry(latestCache, text, settings.targetLanguage, result));
     }
 
     return { ok: true, fromCache: false, result };
@@ -34,11 +35,28 @@ export async function handleTranslateSelection(text: string): Promise<TranslateR
   }
 }
 
-chrome.runtime.onMessage.addListener((message: TranslateRequestMessage, _sender, sendResponse) => {
-  if (message.type !== "translate-selection") {
-    return false;
-  }
+function isTranslateRequestMessage(message: unknown): message is TranslateRequestMessage {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message as Partial<TranslateRequestMessage>).type === "translate-selection" &&
+    typeof (message as Partial<TranslateRequestMessage>).text === "string"
+  );
+}
 
-  handleTranslateSelection(message.text).then(sendResponse);
-  return true;
-});
+export function createTranslateSelectionListener(
+  translateSelection: (text: string) => Promise<TranslateResponse> = handleTranslateSelection
+) {
+  return (message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response: TranslateResponse) => void) => {
+    if (!isTranslateRequestMessage(message)) {
+      return false;
+    }
+
+    translateSelection(message.text).then(sendResponse, () => {
+      sendResponse({ ok: false, code: "network-error", message: "翻译失败" });
+    });
+    return true;
+  };
+}
+
+chrome.runtime.onMessage.addListener(createTranslateSelectionListener());

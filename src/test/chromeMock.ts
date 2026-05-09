@@ -3,6 +3,11 @@ import { vi } from "vitest";
 type StorageData = Record<string, unknown>;
 type StorageAreaOperation = "get" | "set" | "remove";
 type RuntimeLastError = { message?: string };
+export type ChromeRuntimeMessageListener = (
+  message: unknown,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: unknown) => void
+) => boolean | undefined;
 
 const nextErrors: Partial<Record<StorageAreaOperation, RuntimeLastError>> = {};
 
@@ -14,9 +19,41 @@ export function setChromeStorageLastError(operation: StorageAreaOperation, error
   nextErrors[operation] = error;
 }
 
+export function installChromeRuntimeMock(): { listeners: ChromeRuntimeMessageListener[] } {
+  const listeners: ChromeRuntimeMessageListener[] = [];
+  const currentChrome = globalThis.chrome as Partial<typeof chrome> | undefined;
+  const runtime = (currentChrome?.runtime ?? {}) as {
+    lastError: RuntimeLastError | undefined;
+    onMessage?: unknown;
+  };
+
+  runtime.onMessage = {
+    addListener: vi.fn((listener: ChromeRuntimeMessageListener) => {
+      listeners.push(listener);
+    })
+  };
+
+  globalThis.chrome = {
+    ...currentChrome,
+    runtime
+  } as unknown as typeof chrome;
+
+  return { listeners };
+}
+
 export function installChromeStorageMock(initial: StorageData = {}): StorageData {
   const data: StorageData = { ...initial };
-  const runtime = { lastError: undefined as { message?: string } | undefined };
+  const currentChrome = globalThis.chrome as Partial<typeof chrome> | undefined;
+  const runtime = (currentChrome?.runtime ?? {}) as {
+    lastError: RuntimeLastError | undefined;
+    onMessage?: unknown;
+  };
+  runtime.lastError = undefined;
+  if (!("onMessage" in runtime)) {
+    runtime.onMessage = {
+      addListener: vi.fn()
+    };
+  }
 
   function runWithLastError(operation: StorageAreaOperation, callback: () => void): void {
     const error = nextErrors[operation];
@@ -27,6 +64,7 @@ export function installChromeStorageMock(initial: StorageData = {}): StorageData
   }
 
   globalThis.chrome = {
+    ...currentChrome,
     runtime,
     storage: {
       local: {
