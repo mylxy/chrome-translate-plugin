@@ -1,0 +1,32 @@
+<svg width="760" height="430" viewBox="0 0 760 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="划词翻译气泡示例">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <rect width="760" height="430" fill="#050505"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <circle cx="106" cy="55" r="5" fill="#475569"/>
+    <circle cx="106" cy="190" r="5" fill="#475569"/>
+    <circle cx="106" cy="328" r="5" fill="#475569"/>
+    <text x="140" y="66" font-size="28" fill="#f8fafc" font-weight="700">Understand</text>
+    <rect x="140" y="31" width="172" height="48" fill="#486684" opacity="0.95"/>
+    <text x="313" y="66" font-size="28" fill="#f8fafc" font-weight="700"> unfamiliar codebases:</text>
+    <text x="140" y="116" font-size="28" fill="#e5e7eb">Codex can read and explain legacy code.</text>
+    <text x="140" y="206" font-size="28" fill="#f8fafc" font-weight="700">Debug and fix problems:</text>
+    <text x="140" y="256" font-size="28" fill="#e5e7eb">Trace failures and diagnose root causes.</text>
+    <text x="140" y="344" font-size="28" fill="#f8fafc" font-weight="700">Automate development tasks:</text>
+    <text x="140" y="392" font-size="28" fill="#e5e7eb">Run repetitive workflows with confidence.</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="140" y="91" width="438" height="278" rx="14" fill="#ffffff" stroke="#d8dee8" stroke-width="2"/>
+    <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+      <text x="182" y="169" font-size="38" fill="#111827" font-weight="700">Understand</text>
+      <circle cx="520" cy="150" r="23" fill="#111827" stroke="#cbd5e1" stroke-width="2"/>
+      <path d="M513 140 L513 160 L529 150 Z" fill="#ffffff"/>
+      <text x="182" y="244" font-size="34" fill="#64748b">/ˌʌndərˈstænd/</text>
+      <line x1="182" y1="264" x2="462" y2="264" stroke="#e5e7eb" stroke-width="2"/>
+      <text x="182" y="321" font-size="36" fill="#111827">理解</text>
+    </g>
+  </g>
+</svg>
