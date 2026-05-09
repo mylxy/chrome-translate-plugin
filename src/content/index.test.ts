@@ -28,15 +28,12 @@ function setViewport(width = 800, height = 600): void {
   });
 }
 
-function installChrome(sendMessage: SendMessageMock, openOptionsPage = vi.fn()) {
+function installChrome(sendMessage: SendMessageMock) {
   vi.stubGlobal("chrome", {
     runtime: {
       sendMessage,
-      openOptionsPage,
     },
   });
-
-  return { openOptionsPage };
 }
 
 function selectText(
@@ -116,6 +113,39 @@ describe("content selection translation flow", () => {
     );
   });
 
+  it("does not send before the debounce delay elapses", async () => {
+    sendMessage.mockResolvedValue({
+      ok: true,
+      fromCache: false,
+      result: { sourceText: "Hello world", translation: "你好，世界" },
+    });
+
+    selectText("Hello world");
+    await vi.advanceTimersByTimeAsync(219);
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+  });
+
+  it("only translates the last selection after consecutive selection changes", async () => {
+    sendMessage.mockResolvedValue({
+      ok: true,
+      fromCache: false,
+      result: { sourceText: "Second selection", translation: "第二个" },
+    });
+
+    selectText("First selection");
+    await vi.advanceTimersByTimeAsync(100);
+    selectText("Second selection");
+    await flushDebounce();
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: "translate-selection",
+      text: "Second selection",
+    });
+  });
+
   it("hides the bubble and skips messaging for Chinese selections", async () => {
     sendMessage.mockResolvedValue({
       ok: true,
@@ -135,11 +165,10 @@ describe("content selection translation flow", () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it("renders setup guidance for a missing API key and opens options from the setup button", async () => {
-    const openOptionsPage = vi.fn();
-    installChrome(sendMessage, openOptionsPage);
-    await importContentScript();
-    sendMessage.mockResolvedValue({ ok: false, code: "missing-api-key" });
+  it("renders setup guidance for a missing API key and asks the background to open options", async () => {
+    sendMessage
+      .mockResolvedValueOnce({ ok: false, code: "missing-api-key" })
+      .mockResolvedValueOnce(undefined as unknown as TranslateResponse);
 
     selectText("Configure me");
     await flushDebounce();
@@ -149,8 +178,56 @@ describe("content selection translation flow", () => {
       "请先配置 DeepSeek API Key",
     );
     document.querySelector<HTMLButtonElement>(".dst-open-options")?.click();
+    await Promise.resolve();
 
-    expect(openOptionsPage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith({ type: "open-options" });
+  });
+
+  it.each(["   ", "..."])(
+    "hides the bubble and skips messaging for meaningless selection %#",
+    async (text) => {
+      selectText(text);
+      await flushDebounce();
+
+      expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+      expect(sendMessage).not.toHaveBeenCalled();
+    },
+  );
+
+  it("hides and skips messaging when the selection rect has zero width and zero height", async () => {
+    selectText("Invisible text", {
+      top: 100,
+      bottom: 100,
+      left: 200,
+      width: 0,
+      height: 0,
+    });
+    await flushDebounce();
+
+    expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("allows a single zero rect dimension when the other dimension is usable", async () => {
+    const response = deferred<TranslateResponse>();
+    sendMessage.mockReturnValue(response.promise);
+
+    selectText("Tall caret selection", {
+      top: 100,
+      bottom: 120,
+      left: 200,
+      width: 0,
+      height: 20,
+    });
+    await flushDebounce();
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: "translate-selection",
+      text: "Tall caret selection",
+    });
+    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toContain(
+      "翻译中...",
+    );
   });
 
   it("renders a failure message when sendMessage rejects", async () => {
@@ -196,6 +273,26 @@ describe("content selection translation flow", () => {
     expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
   });
 
+  it("cancels a pending debounced selection on Escape", async () => {
+    selectText("Pending selection");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushDebounce();
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+  });
+
+  it("cancels a pending debounced selection on outside mousedown", async () => {
+    selectText("Pending selection");
+
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushDebounce();
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(document.querySelector(BUBBLE_SELECTOR)).toBeNull();
+  });
+
   it("closes on outside mousedown but keeps the bubble for internal mousedown", async () => {
     sendMessage.mockResolvedValue({
       ok: true,
@@ -236,6 +333,36 @@ describe("content selection translation flow", () => {
       ok: true,
       fromCache: false,
       result: { sourceText: "First selection", translation: "第一个" },
+    });
+    await Promise.resolve();
+
+    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toContain("第二个");
+    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).not.toContain("第一个");
+  });
+
+  it("invalidates an in-flight response as soon as the selection changes", async () => {
+    const first = deferred<TranslateResponse>();
+    const second = deferred<TranslateResponse>();
+    sendMessage.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    selectText("First selection");
+    await flushDebounce();
+    selectText("Second selection");
+
+    first.resolve({
+      ok: true,
+      fromCache: false,
+      result: { sourceText: "First selection", translation: "第一个" },
+    });
+    await Promise.resolve();
+
+    expect(document.querySelector(BUBBLE_SELECTOR)?.textContent).toBe("翻译中...");
+
+    await flushDebounce();
+    second.resolve({
+      ok: true,
+      fromCache: false,
+      result: { sourceText: "Second selection", translation: "第二个" },
     });
     await Promise.resolve();
 

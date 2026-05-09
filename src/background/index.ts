@@ -2,7 +2,13 @@ import { addCacheEntry, findCacheEntry } from "../shared/cache";
 import { DeepSeekError, requestDeepSeekTranslation } from "../shared/deepseek";
 import { getSettings, getTranslationCache, saveTranslationCache } from "../shared/storage";
 import { shouldCacheSelection } from "../shared/text";
-import type { TargetLanguage, TranslateRequestMessage, TranslateResponse, TranslationResult } from "../shared/types";
+import type {
+  OpenOptionsMessage,
+  TargetLanguage,
+  TranslateRequestMessage,
+  TranslateResponse,
+  TranslationResult,
+} from "../shared/types";
 
 let cacheWriteQueue: Promise<void> = Promise.resolve();
 
@@ -57,10 +63,34 @@ function isTranslateRequestMessage(message: unknown): message is TranslateReques
   );
 }
 
+function isOpenOptionsMessage(message: unknown): message is OpenOptionsMessage {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message as Partial<OpenOptionsMessage>).type === "open-options"
+  );
+}
+
+function openOptionsPage(): void {
+  try {
+    const maybePromise = chrome.runtime.openOptionsPage?.();
+    if (maybePromise && typeof maybePromise.catch === "function") {
+      maybePromise.catch(() => undefined);
+    }
+  } catch {
+    // Opening options is best effort from the background listener.
+  }
+}
+
 export function createTranslateSelectionListener(
   translateSelection: (text: string) => Promise<TranslateResponse> = handleTranslateSelection
 ) {
   return (message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response: TranslateResponse) => void) => {
+    if (isOpenOptionsMessage(message)) {
+      openOptionsPage();
+      return false;
+    }
+
     if (!isTranslateRequestMessage(message)) {
       return false;
     }

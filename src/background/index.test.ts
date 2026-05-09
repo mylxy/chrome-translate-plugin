@@ -298,7 +298,23 @@ describe("background translation handling", () => {
     });
   });
 
-  it("ignores runtime messages that are not translate-selection requests", async () => {
+  it("opens the options page for open-options runtime messages", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
+    const runtime = installChromeRuntimeMock();
+    const openOptionsPage = vi.fn();
+    chrome.runtime.openOptionsPage = openOptionsPage;
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    const sendResponse = vi.fn();
+
+    expect(listener?.({ type: "open-options" }, {}, sendResponse)).toBe(false);
+    expect(openOptionsPage).toHaveBeenCalledTimes(1);
+    expect(sendResponse).not.toHaveBeenCalled();
+    expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores runtime messages that are not supported requests", async () => {
     installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
     const runtime = installChromeRuntimeMock();
     await importBackground();
@@ -306,7 +322,7 @@ describe("background translation handling", () => {
     const listener = runtime.listeners[0];
     const sendResponse = vi.fn();
 
-    expect(listener?.({ type: "open-options" }, {}, sendResponse)).toBe(false);
+    expect(listener?.({ type: "unknown-message" }, {}, sendResponse)).toBe(false);
     expect(sendResponse).not.toHaveBeenCalled();
     expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
   });

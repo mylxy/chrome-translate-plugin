@@ -23,6 +23,8 @@ let debounceTimer: number | undefined;
 let requestId = 0;
 
 function closeBubble(): void {
+  window.clearTimeout(debounceTimer);
+  debounceTimer = undefined;
   requestId += 1;
   hideBubble();
 }
@@ -32,7 +34,7 @@ function getBubble(): HTMLElement | null {
 }
 
 function isUsableRect(rect: DOMRect): boolean {
-  return rect.width > 0 && rect.height > 0;
+  return !(rect.width === 0 && rect.height === 0);
 }
 
 function getSelectionState():
@@ -57,11 +59,8 @@ function getSelectionState():
 }
 
 function openOptions(): void {
-  const openOptionsPage = chrome.runtime.openOptionsPage;
-  if (typeof openOptionsPage !== "function") return;
-
   try {
-    const maybePromise = openOptionsPage();
+    const maybePromise = chrome.runtime.sendMessage({ type: "open-options" });
     if (maybePromise && typeof maybePromise.catch === "function") {
       maybePromise.catch(() => undefined);
     }
@@ -102,6 +101,7 @@ async function requestTranslation(
 }
 
 function handleSelectionChange(): void {
+  requestId += 1;
   window.clearTimeout(debounceTimer);
   debounceTimer = window.setTimeout(() => {
     const selectionState = getSelectionState();
@@ -135,9 +135,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 function handleMouseDown(event: MouseEvent): void {
   const bubble = getBubble();
-  if (!bubble) return;
-
-  if (event.target instanceof Node && bubble.contains(event.target)) {
+  if (bubble && event.target instanceof Node && bubble.contains(event.target)) {
     return;
   }
 
@@ -150,11 +148,10 @@ function install(): () => void {
   document.addEventListener("mousedown", handleMouseDown);
 
   return () => {
-    window.clearTimeout(debounceTimer);
+    closeBubble();
     document.removeEventListener("selectionchange", handleSelectionChange);
     document.removeEventListener("keydown", handleKeydown);
     document.removeEventListener("mousedown", handleMouseDown);
-    hideBubble();
   };
 }
 

@@ -25,6 +25,12 @@ export interface TranslateRequestMessage {
   text: string;
 }
 
+export interface OpenOptionsMessage {
+  type: "open-options";
+}
+
+export type RuntimeMessage = TranslateRequestMessage | OpenOptionsMessage;
+
 export interface TranslateSuccessResponse {
   ok: true;
   result: TranslationResult;
