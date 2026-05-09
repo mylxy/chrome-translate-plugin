@@ -7,9 +7,9 @@ const TRANSLATION_CACHE = "translationCache";
 function storageGet<T>(keys: string[]): Promise<T> {
   return new Promise((resolve, reject) => {
     chrome.storage.local.get(keys, (items) => {
-      const message = chrome.runtime.lastError?.message;
-      if (message) {
-        reject(new Error(message));
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message || "Chrome storage operation failed"));
         return;
       }
       resolve(items as T);
@@ -20,9 +20,9 @@ function storageGet<T>(keys: string[]): Promise<T> {
 function storageSet(items: Record<string, unknown>): Promise<void> {
   return new Promise((resolve, reject) => {
     chrome.storage.local.set(items, () => {
-      const message = chrome.runtime.lastError?.message;
-      if (message) {
-        reject(new Error(message));
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message || "Chrome storage operation failed"));
         return;
       }
       resolve();
@@ -33,9 +33,9 @@ function storageSet(items: Record<string, unknown>): Promise<void> {
 function storageRemove(keys: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     chrome.storage.local.remove(keys, () => {
-      const message = chrome.runtime.lastError?.message;
-      if (message) {
-        reject(new Error(message));
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message || "Chrome storage operation failed"));
         return;
       }
       resolve();

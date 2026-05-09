@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { installChromeStorageMock, setChromeStorageError } from "../test/chromeMock";
+import { installChromeStorageMock, setChromeStorageError, setChromeStorageLastError } from "../test/chromeMock";
 import {
   clearTranslationCache,
   getSettings,
@@ -47,6 +47,26 @@ describe("storage helpers", () => {
     await expect(clearTranslationCache()).rejects.toThrow("remove failed");
   });
 
+  it("rejects with fallback message when reading storage has lastError without message", async () => {
+    setChromeStorageLastError("get");
+
+    await expect(getSettings()).rejects.toThrow("Chrome storage operation failed");
+  });
+
+  it("rejects with fallback message when saving storage has lastError with empty message", async () => {
+    setChromeStorageLastError("set", { message: "" });
+
+    await expect(saveSettings({ apiKey: "sk-test", targetLanguage: "en-US" })).rejects.toThrow(
+      "Chrome storage operation failed"
+    );
+  });
+
+  it("rejects with fallback message when removing storage has lastError without message", async () => {
+    setChromeStorageLastError("remove");
+
+    await expect(clearTranslationCache()).rejects.toThrow("Chrome storage operation failed");
+  });
+
   it("supports chrome storage get default values in the mock", async () => {
     installChromeStorageMock({ saved: "value" });
 
@@ -55,6 +75,16 @@ describe("storage helpers", () => {
     });
 
     expect(result).toEqual({ saved: "value", missing: "fallback" });
+  });
+
+  it("does not replace stored null with object defaults in the mock", async () => {
+    installChromeStorageMock({ apiKey: null });
+
+    const result = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get({ apiKey: "default" }, resolve);
+    });
+
+    expect(result).toEqual({ apiKey: null });
   });
 
   it("filters invalid cache entries", async () => {

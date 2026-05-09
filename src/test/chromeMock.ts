@@ -2,11 +2,16 @@ import { vi } from "vitest";
 
 type StorageData = Record<string, unknown>;
 type StorageAreaOperation = "get" | "set" | "remove";
+type RuntimeLastError = { message?: string };
 
-const nextErrors: Partial<Record<StorageAreaOperation, string>> = {};
+const nextErrors: Partial<Record<StorageAreaOperation, RuntimeLastError>> = {};
 
 export function setChromeStorageError(operation: StorageAreaOperation, message: string): void {
-  nextErrors[operation] = message;
+  nextErrors[operation] = { message };
+}
+
+export function setChromeStorageLastError(operation: StorageAreaOperation, error: RuntimeLastError = {}): void {
+  nextErrors[operation] = error;
 }
 
 export function installChromeStorageMock(initial: StorageData = {}): StorageData {
@@ -14,9 +19,9 @@ export function installChromeStorageMock(initial: StorageData = {}): StorageData
   const runtime = { lastError: undefined as { message?: string } | undefined };
 
   function runWithLastError(operation: StorageAreaOperation, callback: () => void): void {
-    const message = nextErrors[operation];
+    const error = nextErrors[operation];
     delete nextErrors[operation];
-    runtime.lastError = message ? { message } : undefined;
+    runtime.lastError = error;
     callback();
     runtime.lastError = undefined;
   }
@@ -32,7 +37,9 @@ export function installChromeStorageMock(initial: StorageData = {}): StorageData
           }
           if (typeof keys === "object" && !Array.isArray(keys)) {
             const result: StorageData = {};
-            for (const [key, defaultValue] of Object.entries(keys)) result[key] = data[key] ?? defaultValue;
+            for (const [key, defaultValue] of Object.entries(keys)) {
+              result[key] = Object.prototype.hasOwnProperty.call(data, key) ? data[key] : defaultValue;
+            }
             runWithLastError("get", () => callback(result));
             return;
           }
