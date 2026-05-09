@@ -93,6 +93,21 @@ describe("background translation handling", () => {
     });
   });
 
+  it("always requests DeepSeek with zh-CN target language", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "ja-JP", bubbleFontSize: 12 });
+    installChromeRuntimeMock();
+    const result: TranslationResult = { sourceText: "Learning", translation: "学习" };
+    requestDeepSeekTranslationMock.mockResolvedValueOnce(result);
+    const { handleTranslateSelection } = await importBackground();
+
+    await expect(handleTranslateSelection("Learning")).resolves.toEqual({
+      ok: true,
+      fromCache: false,
+      result
+    });
+    expect(requestDeepSeekTranslationMock).toHaveBeenCalledWith("sk-test", "Learning", "zh-CN");
+  });
+
   it("merges concurrent short phrase cache writes with the latest stored cache", async () => {
     const storage = installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN" });
     installChromeRuntimeMock();
@@ -334,6 +349,24 @@ describe("background translation handling", () => {
     });
     expect(sendResponse).not.toHaveBeenCalled();
     expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+  });
+
+  it("stops Chrome TTS for stop-speaking runtime messages", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 });
+    const runtime = installChromeRuntimeMock();
+    chrome.tts = {
+      stop: vi.fn(),
+      speak: vi.fn()
+    } as unknown as typeof chrome.tts;
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    const sendResponse = vi.fn();
+
+    expect(listener?.({ type: "stop-speaking" }, {}, sendResponse)).toBe(false);
+    expect(chrome.tts.stop).toHaveBeenCalledTimes(1);
+    expect(chrome.tts.speak).not.toHaveBeenCalled();
+    expect(sendResponse).not.toHaveBeenCalled();
   });
 
   it("ignores runtime messages that are not supported requests", async () => {

@@ -5,12 +5,14 @@ import { shouldCacheSelection } from "../shared/text";
 import type {
   OpenOptionsMessage,
   SpeakSourceMessage,
+  StopSpeakingMessage,
   TargetLanguage,
   TranslateRequestMessage,
   TranslateResponse,
   TranslationResult,
 } from "../shared/types";
 
+const FIXED_TARGET_LANGUAGE: TargetLanguage = "zh-CN";
 let cacheWriteQueue: Promise<void> = Promise.resolve();
 
 function enqueueCacheWrite(text: string, targetLanguage: TargetLanguage, result: TranslationResult): Promise<void> {
@@ -31,15 +33,15 @@ export async function handleTranslateSelection(text: string): Promise<TranslateR
     }
 
     const cache = await getTranslationCache();
-    const cached = findCacheEntry(cache, text, settings.targetLanguage);
+    const cached = findCacheEntry(cache, text, FIXED_TARGET_LANGUAGE);
     if (cached) {
       return { ok: true, fromCache: true, result: cached };
     }
 
-    const result = await requestDeepSeekTranslation(apiKey, text, settings.targetLanguage);
+    const result = await requestDeepSeekTranslation(apiKey, text, FIXED_TARGET_LANGUAGE);
     if (shouldCacheSelection(text)) {
       try {
-        await enqueueCacheWrite(text, settings.targetLanguage, result);
+        await enqueueCacheWrite(text, FIXED_TARGET_LANGUAGE, result);
       } catch {
         // Cache persistence is best effort; a translated result should still reach the user.
       }
@@ -82,6 +84,14 @@ function isSpeakSourceMessage(message: unknown): message is SpeakSourceMessage {
   );
 }
 
+function isStopSpeakingMessage(message: unknown): message is StopSpeakingMessage {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message as Partial<StopSpeakingMessage>).type === "stop-speaking"
+  );
+}
+
 function openOptionsPage(): void {
   try {
     const maybePromise = chrome.runtime.openOptionsPage?.();
@@ -90,6 +100,14 @@ function openOptionsPage(): void {
     }
   } catch {
     // Opening options is best effort from the background listener.
+  }
+}
+
+function stopSpeaking(): void {
+  try {
+    chrome.tts?.stop?.();
+  } catch {
+    // Browser TTS stop is best effort from the background listener.
   }
 }
 
@@ -116,6 +134,11 @@ export function createTranslateSelectionListener(
 
     if (isSpeakSourceMessage(message)) {
       speakSourceText(message.text);
+      return false;
+    }
+
+    if (isStopSpeakingMessage(message)) {
+      stopSpeaking();
       return false;
     }
 

@@ -35,7 +35,15 @@ export interface SpeakSourceMessage {
   text: string;
 }
 
-export type RuntimeMessage = TranslateRequestMessage | OpenOptionsMessage | SpeakSourceMessage;
+export interface StopSpeakingMessage {
+  type: "stop-speaking";
+}
+
+export type RuntimeMessage =
+  | TranslateRequestMessage
+  | OpenOptionsMessage
+  | SpeakSourceMessage
+  | StopSpeakingMessage;
 
 export interface TranslateSuccessResponse {
   ok: true;
