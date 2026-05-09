@@ -20,12 +20,14 @@ function ensureStyles(): void {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    .dst-bubble {
+    #deepseek-selection-translate-bubble.dst-bubble {
       position: fixed;
       z-index: 2147483647;
       box-sizing: border-box;
       width: max-content;
-      min-width: 150px;
+      min-width: var(--dst-min-width);
+      max-width: var(--dst-max-width);
+      max-height: var(--dst-max-height);
       overflow: auto;
       padding: 10px 12px;
       border: 1px solid #d8dee8;
@@ -37,7 +39,7 @@ function ensureStyles(): void {
       text-align: left;
     }
 
-    .dst-source-row {
+    #deepseek-selection-translate-bubble .dst-source-row {
       display: flex;
       align-items: center;
       justify-content: flex-start;
@@ -46,14 +48,14 @@ function ensureStyles(): void {
       text-align: left;
     }
 
-    .dst-source {
+    #deepseek-selection-translate-bubble .dst-source {
       min-width: 0;
       font-weight: 650;
       overflow-wrap: anywhere;
       text-align: left;
     }
 
-    .dst-play {
+    #deepseek-selection-translate-bubble .dst-play {
       flex: 0 0 auto;
       width: 22px;
       height: 22px;
@@ -66,11 +68,16 @@ function ensureStyles(): void {
       line-height: 1;
     }
 
-    .dst-play:hover {
+    #deepseek-selection-translate-bubble .dst-play:hover {
       background: #eef2f7;
     }
 
-    .dst-phonetic {
+    #deepseek-selection-translate-bubble .dst-play:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    #deepseek-selection-translate-bubble .dst-phonetic {
       margin-bottom: 8px;
       color: #64748b;
       font-size: 12px;
@@ -78,7 +85,7 @@ function ensureStyles(): void {
       text-align: left;
     }
 
-    .dst-translation {
+    #deepseek-selection-translate-bubble .dst-translation {
       border-top: 1px solid #edf2f7;
       padding-top: 8px;
       font-size: 15px;
@@ -86,12 +93,12 @@ function ensureStyles(): void {
       text-align: left;
     }
 
-    .dst-setup {
+    #deepseek-selection-translate-bubble.dst-setup {
       display: grid;
       gap: 8px;
     }
 
-    .dst-open-options {
+    #deepseek-selection-translate-bubble .dst-open-options {
       justify-self: start;
       border: 1px solid #cbd5e1;
       border-radius: 7px;
@@ -102,7 +109,7 @@ function ensureStyles(): void {
       font: inherit;
     }
 
-    .dst-open-options:hover {
+    #deepseek-selection-translate-bubble .dst-open-options:hover {
       background: #eef2f7;
     }
   `;
@@ -114,15 +121,27 @@ function createBubble(position: BubblePosition): HTMLDivElement {
   hideBubble();
 
   const bubble = document.createElement("div");
+  const maxWidth = `${position.maxWidth}px`;
+  const maxHeight = `${position.maxHeight}px`;
+  const minWidth = `${Math.min(150, position.maxWidth)}px`;
+
   bubble.id = BUBBLE_ID;
   bubble.className = `dst-bubble dst-${position.placement}`;
   bubble.style.top = `${position.top}px`;
   bubble.style.left = `${position.left}px`;
-  bubble.style.maxWidth = `${position.maxWidth}px`;
-  bubble.style.maxHeight = `${position.maxHeight}px`;
+  bubble.style.setProperty("--dst-max-width", maxWidth);
+  bubble.style.setProperty("--dst-max-height", maxHeight);
+  bubble.style.setProperty("--dst-min-width", minWidth);
+  bubble.style.minWidth = minWidth;
+  bubble.style.maxWidth = maxWidth;
+  bubble.style.maxHeight = maxHeight;
   document.body.append(bubble);
 
   return bubble;
+}
+
+function canSpeakSourceText(): boolean {
+  return Boolean(globalThis.speechSynthesis && globalThis.SpeechSynthesisUtterance);
 }
 
 function speakSourceText(sourceText: string): void {
@@ -152,6 +171,8 @@ export function renderTranslationBubble(input: RenderTranslationInput): void {
   play.className = "dst-play";
   play.type = "button";
   play.title = "播放原文";
+  play.setAttribute("aria-label", "播放原文");
+  play.disabled = !canSpeakSourceText();
   play.textContent = "▶";
   play.addEventListener("click", () => {
     speakSourceText(input.result.sourceText);

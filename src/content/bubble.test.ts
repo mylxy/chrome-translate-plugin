@@ -76,7 +76,11 @@ describe("bubble renderer", () => {
       position,
     });
 
-    document.querySelector<HTMLButtonElement>(".dst-play")?.click();
+    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+
+    expect(play?.getAttribute("aria-label")).toBe("播放原文");
+    expect(play?.disabled).toBe(false);
+    play?.click();
 
     expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1);
     expect(speechSynthesis.speak).toHaveBeenCalledTimes(1);
@@ -135,5 +139,51 @@ describe("bubble renderer", () => {
     expect(bubble?.style.left).toBe("120px");
     expect(bubble?.style.maxWidth).toBe("420px");
     expect(bubble?.style.maxHeight).toBe("260px");
+  });
+
+  it("does not let the minimum width exceed a narrow max width", () => {
+    renderTranslationBubble({
+      result: { sourceText: "Narrow", translation: "窄" },
+      position: { ...position, maxWidth: 84 },
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+
+    expect(bubble?.style.getPropertyValue("--dst-max-width")).toBe("84px");
+    expect(bubble?.style.getPropertyValue("--dst-min-width")).toBe("84px");
+    expect(Number.parseInt(bubble?.style.minWidth ?? "0", 10)).toBeLessThanOrEqual(
+      Number.parseInt(bubble?.style.maxWidth ?? "0", 10),
+    );
+  });
+
+  it("scopes injected styles to the bubble id and reuses one style tag", () => {
+    renderTranslationBubble({
+      result: { sourceText: "Learning", translation: "学习" },
+      position,
+    });
+    renderErrorBubble(position, "翻译中...");
+
+    const styles = document.querySelectorAll(`#deepseek-selection-translate-style`);
+    const css = styles[0]?.textContent ?? "";
+
+    expect(styles).toHaveLength(1);
+    expect(css).toContain("#deepseek-selection-translate-bubble.dst-bubble");
+    expect(css).not.toMatch(/^\s*\.dst-/m);
+  });
+
+  it("disables the play button when browser TTS is unavailable", () => {
+    vi.stubGlobal("speechSynthesis", undefined);
+    vi.stubGlobal("SpeechSynthesisUtterance", undefined);
+
+    renderTranslationBubble({
+      result: { sourceText: "Learning", translation: "学习" },
+      position,
+    });
+
+    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+
+    expect(play?.disabled).toBe(true);
+    expect(play?.getAttribute("aria-label")).toBe("播放原文");
+    expect(() => play?.click()).not.toThrow();
   });
 });
