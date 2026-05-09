@@ -3,11 +3,23 @@ import type { BubblePosition } from "./position";
 
 const BUBBLE_ID = "deepseek-selection-translate-bubble";
 const STYLE_ID = "deepseek-selection-translate-style";
+const DEFAULT_BUBBLE_FONT_SIZE = 12;
+
+type PlaybackState = "idle" | "playing";
 
 interface RenderTranslationInput {
   result: TranslationResult;
   position: BubblePosition;
+  bubbleFontSize?: number;
+  playbackState?: PlaybackState;
   speakSource?: (sourceText: string) => void | Promise<void>;
+  stopSpeaking?: () => void | Promise<void>;
+}
+
+interface RenderLoadingInput {
+  sourceText: string;
+  position: BubblePosition;
+  bubbleFontSize?: number;
 }
 
 interface RenderSetupInput {
@@ -36,16 +48,15 @@ function ensureStyles(): void {
       background: #ffffff;
       color: #111827;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: var(--dst-font-size)/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       text-align: left;
     }
 
-    #deepseek-selection-translate-bubble .dst-source-row {
-      display: flex;
+    #deepseek-selection-translate-bubble .dst-content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px;
+      gap: 6px 10px;
       align-items: center;
-      justify-content: flex-start;
-      gap: 7px;
-      margin-bottom: 4px;
       text-align: left;
     }
 
@@ -56,42 +67,64 @@ function ensureStyles(): void {
       text-align: left;
     }
 
-    #deepseek-selection-translate-bubble .dst-play {
+    #deepseek-selection-translate-bubble .dst-control-cell {
+      display: flex;
+      justify-content: flex-end;
+      align-self: start;
+    }
+
+    #deepseek-selection-translate-bubble .dst-control {
       flex: 0 0 auto;
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       border: 1px solid #cbd5e1;
       border-radius: 999px;
-      background: #f8fafc;
-      color: #0f172a;
+      background: #111827;
+      color: #ffffff;
       cursor: pointer;
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1;
     }
 
-    #deepseek-selection-translate-bubble .dst-play:hover {
-      background: #eef2f7;
+    #deepseek-selection-translate-bubble .dst-control:hover {
+      background: #334155;
     }
 
-    #deepseek-selection-translate-bubble .dst-play:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
+    #deepseek-selection-translate-bubble .dst-control:disabled {
+      cursor: default;
+      background: #e2e8f0;
+      color: #64748b;
+      opacity: 1;
     }
 
     #deepseek-selection-translate-bubble .dst-phonetic {
-      margin-bottom: 8px;
       color: #64748b;
-      font-size: 12px;
+      font-size: max(10px, calc(var(--dst-font-size-value) * 1px - 1px));
       overflow-wrap: anywhere;
       text-align: left;
     }
 
     #deepseek-selection-translate-bubble .dst-translation {
       border-top: 1px solid #edf2f7;
-      padding-top: 8px;
-      font-size: 15px;
+      padding-top: 7px;
+      font-size: var(--dst-font-size);
       overflow-wrap: anywhere;
       text-align: left;
+    }
+
+    #deepseek-selection-translate-bubble .dst-placeholder {
+      display: inline-block;
+      height: 0.9em;
+      border-radius: 5px;
+      background: #eef2f7;
+    }
+
+    #deepseek-selection-translate-bubble .dst-phonetic-placeholder {
+      width: 92px;
+    }
+
+    #deepseek-selection-translate-bubble .dst-translation-placeholder {
+      width: 130px;
     }
 
     #deepseek-selection-translate-bubble.dst-setup {
@@ -117,7 +150,16 @@ function ensureStyles(): void {
   document.head.append(style);
 }
 
-function createBubble(position: BubblePosition): HTMLDivElement {
+function getBubbleFontSize(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : DEFAULT_BUBBLE_FONT_SIZE;
+}
+
+function createBubble(
+  position: BubblePosition,
+  bubbleFontSize = DEFAULT_BUBBLE_FONT_SIZE,
+): HTMLDivElement {
   ensureStyles();
   hideBubble();
 
@@ -125,6 +167,7 @@ function createBubble(position: BubblePosition): HTMLDivElement {
   const maxWidth = `${position.maxWidth}px`;
   const maxHeight = `${position.maxHeight}px`;
   const minWidth = `${Math.min(150, position.maxWidth)}px`;
+  const fontSize = getBubbleFontSize(bubbleFontSize);
 
   bubble.id = BUBBLE_ID;
   bubble.className = `dst-bubble dst-${position.placement}`;
@@ -133,6 +176,8 @@ function createBubble(position: BubblePosition): HTMLDivElement {
   bubble.style.setProperty("--dst-max-width", maxWidth);
   bubble.style.setProperty("--dst-max-height", maxHeight);
   bubble.style.setProperty("--dst-min-width", minWidth);
+  bubble.style.setProperty("--dst-font-size", `${fontSize}px`);
+  bubble.style.setProperty("--dst-font-size-value", String(fontSize));
   bubble.style.minWidth = minWidth;
   bubble.style.maxWidth = maxWidth;
   bubble.style.maxHeight = maxHeight;
@@ -155,49 +200,105 @@ function speakSourceText(sourceText: string): void {
   synthesis.speak(new Utterance(sourceText));
 }
 
+function createGrid(sourceText: string): {
+  grid: HTMLDivElement;
+  controlCell: HTMLDivElement;
+} {
+  const grid = document.createElement("div");
+  grid.className = "dst-content-grid";
+
+  const source = document.createElement("div");
+  source.className = "dst-source";
+  source.textContent = sourceText;
+
+  const controlCell = document.createElement("div");
+  controlCell.className = "dst-control-cell";
+
+  grid.append(source, controlCell);
+
+  return { grid, controlCell };
+}
+
+function appendGridRow(grid: HTMLDivElement, content: HTMLElement): void {
+  grid.append(content, document.createElement("div"));
+}
+
+function createControl(label: string, text: string): HTMLButtonElement {
+  const control = document.createElement("button");
+  control.className = "dst-control dst-play";
+  control.type = "button";
+  control.title = label;
+  control.setAttribute("aria-label", label);
+  control.textContent = text;
+  return control;
+}
+
 export function hideBubble(): void {
   document.getElementById(BUBBLE_ID)?.remove();
 }
 
+export function renderLoadingBubble(input: RenderLoadingInput): void {
+  const bubble = createBubble(input.position, input.bubbleFontSize);
+  const { grid, controlCell } = createGrid(input.sourceText);
+
+  const loading = createControl("翻译中", "•••");
+  loading.disabled = true;
+  controlCell.append(loading);
+
+  const phonetic = document.createElement("div");
+  phonetic.className = "dst-phonetic";
+  const phoneticPlaceholder = document.createElement("span");
+  phoneticPlaceholder.className = "dst-placeholder dst-phonetic-placeholder";
+  phonetic.append(phoneticPlaceholder);
+  appendGridRow(grid, phonetic);
+
+  const translation = document.createElement("div");
+  translation.className = "dst-translation";
+  const translationPlaceholder = document.createElement("span");
+  translationPlaceholder.className = "dst-placeholder dst-translation-placeholder";
+  translation.append(translationPlaceholder);
+  appendGridRow(grid, translation);
+
+  bubble.append(grid);
+}
+
 export function renderTranslationBubble(input: RenderTranslationInput): void {
-  const bubble = createBubble(input.position);
-  const sourceRow = document.createElement("div");
-  sourceRow.className = "dst-source-row";
+  const bubble = createBubble(input.position, input.bubbleFontSize);
+  const { grid, controlCell } = createGrid(input.result.sourceText);
+  const isPlaying = input.playbackState === "playing";
+  const control = createControl(isPlaying ? "停止播放" : "播放原文", isPlaying ? "Ⅱ" : "▶");
 
-  const source = document.createElement("div");
-  source.className = "dst-source";
-  source.textContent = input.result.sourceText;
+  if (isPlaying) {
+    control.addEventListener("click", () => {
+      void Promise.resolve(input.stopSpeaking?.()).catch(() => undefined);
+    });
+  } else {
+    control.disabled = !input.speakSource && !canSpeakSourceText();
+    control.addEventListener("click", () => {
+      if (input.speakSource) {
+        void Promise.resolve(input.speakSource(input.result.sourceText)).catch(() => undefined);
+        return;
+      }
 
-  const play = document.createElement("button");
-  play.className = "dst-play";
-  play.type = "button";
-  play.title = "播放原文";
-  play.setAttribute("aria-label", "播放原文");
-  play.disabled = !input.speakSource && !canSpeakSourceText();
-  play.textContent = "▶";
-  play.addEventListener("click", () => {
-    if (input.speakSource) {
-      void Promise.resolve(input.speakSource(input.result.sourceText)).catch(() => undefined);
-      return;
-    }
+      speakSourceText(input.result.sourceText);
+    });
+  }
 
-    speakSourceText(input.result.sourceText);
-  });
-
-  sourceRow.append(source, play);
-  bubble.append(sourceRow);
+  controlCell.append(control);
 
   if (input.result.phonetic) {
     const phonetic = document.createElement("div");
     phonetic.className = "dst-phonetic";
     phonetic.textContent = input.result.phonetic;
-    bubble.append(phonetic);
+    appendGridRow(grid, phonetic);
   }
 
   const translation = document.createElement("div");
   translation.className = "dst-translation";
   translation.textContent = input.result.translation;
-  bubble.append(translation);
+  appendGridRow(grid, translation);
+
+  bubble.append(grid);
 }
 
 export function renderSetupBubble(input: RenderSetupInput): void {

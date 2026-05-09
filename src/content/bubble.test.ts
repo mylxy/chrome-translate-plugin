@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   hideBubble,
   renderErrorBubble,
+  renderLoadingBubble,
   renderSetupBubble,
   renderTranslationBubble,
 } from "./bubble";
@@ -35,7 +36,7 @@ describe("bubble renderer", () => {
     );
   });
 
-  it("renders source, phonetic, translation, and a trailing play button in the source row", () => {
+  it("renders source, phonetic, translation, and a right aligned play button in the content grid", () => {
     renderTranslationBubble({
       result: {
         sourceText: "Learning",
@@ -46,9 +47,9 @@ describe("bubble renderer", () => {
     });
 
     const bubble = document.querySelector(".dst-bubble");
-    const sourceRow = document.querySelector(".dst-source-row");
+    const contentGrid = document.querySelector(".dst-content-grid");
     const source = document.querySelector(".dst-source");
-    const play = document.querySelector(".dst-play");
+    const play = document.querySelector(".dst-control");
 
     expect(bubble).not.toBeNull();
     expect(source?.textContent).toBe("Learning");
@@ -56,9 +57,64 @@ describe("bubble renderer", () => {
       "/ˈlɜːrnɪŋ/",
     );
     expect(document.querySelector(".dst-translation")?.textContent).toBe("学习");
-    expect(play?.parentElement).toBe(sourceRow);
-    expect(sourceRow?.children[0]).toBe(source);
-    expect(sourceRow?.children[1]).toBe(play);
+    expect(contentGrid?.children[0]).toBe(source);
+    expect(play?.parentElement?.className).toContain("dst-control-cell");
+  });
+
+  it("renders a loading bubble with source text, placeholders, and a right aligned loading control", () => {
+    renderLoadingBubble({
+      sourceText: "Learning curve",
+      position,
+      bubbleFontSize: 16,
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+    const control = document.querySelector<HTMLButtonElement>(".dst-control");
+
+    expect(document.querySelector(".dst-source")?.textContent).toBe("Learning curve");
+    expect(document.querySelector(".dst-phonetic-placeholder")).not.toBeNull();
+    expect(document.querySelector(".dst-translation-placeholder")).not.toBeNull();
+    expect(control?.textContent).toBe("•••");
+    expect(control?.disabled).toBe(true);
+    expect(bubble?.style.getPropertyValue("--dst-font-size")).toBe("16px");
+  });
+
+  it("renders a ready bubble with configured font size and a right aligned play control", () => {
+    const speakSource = vi.fn();
+
+    renderTranslationBubble({
+      result: { sourceText: "Learning", phonetic: "/ˈlɜːrnɪŋ/", translation: "学习" },
+      position,
+      bubbleFontSize: 14,
+      playbackState: "idle",
+      speakSource,
+    });
+
+    const bubble = document.querySelector<HTMLElement>(".dst-bubble");
+    const control = document.querySelector<HTMLButtonElement>(".dst-control");
+
+    expect(control?.disabled).toBe(false);
+    expect(control?.textContent).toBe("▶");
+    expect(control?.parentElement?.className).toContain("dst-control-cell");
+    expect(bubble?.style.getPropertyValue("--dst-font-size")).toBe("14px");
+  });
+
+  it("renders a pause control while playback is active", () => {
+    const stopSpeaking = vi.fn();
+
+    renderTranslationBubble({
+      result: { sourceText: "Learning", translation: "学习" },
+      position,
+      bubbleFontSize: 12,
+      playbackState: "playing",
+      stopSpeaking,
+    });
+
+    const control = document.querySelector<HTMLButtonElement>(".dst-control");
+    control?.click();
+
+    expect(control?.textContent).toBe("Ⅱ");
+    expect(stopSpeaking).toHaveBeenCalledTimes(1);
   });
 
   it("does not render the phonetic line when it is missing", () => {
@@ -76,7 +132,7 @@ describe("bubble renderer", () => {
       position,
     });
 
-    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+    const play = document.querySelector<HTMLButtonElement>(".dst-control");
 
     expect(play?.getAttribute("aria-label")).toBe("播放原文");
     expect(play?.disabled).toBe(false);
@@ -180,7 +236,7 @@ describe("bubble renderer", () => {
       position,
     });
 
-    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+    const play = document.querySelector<HTMLButtonElement>(".dst-control");
 
     expect(play?.disabled).toBe(true);
     expect(play?.getAttribute("aria-label")).toBe("播放原文");
@@ -198,7 +254,7 @@ describe("bubble renderer", () => {
       speakSource,
     });
 
-    const play = document.querySelector<HTMLButtonElement>(".dst-play");
+    const play = document.querySelector<HTMLButtonElement>(".dst-control");
 
     expect(play?.disabled).toBe(false);
     play?.click();
