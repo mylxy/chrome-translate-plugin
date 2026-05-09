@@ -5,6 +5,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     restoreMocks: true,
-    clearMocks: true
+    clearMocks: true,
+    typecheck: {
+      tsconfig: "./tsconfig.test.json"
+    }
   }
 });

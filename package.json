@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "vite build",
-    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "check": "tsc --noEmit"
   },
