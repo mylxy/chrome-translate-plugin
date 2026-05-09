@@ -39,11 +39,16 @@ export interface StopSpeakingMessage {
   type: "stop-speaking";
 }
 
+export interface SpeakingEndedMessage {
+  type: "speaking-ended";
+}
+
 export type RuntimeMessage =
   | TranslateRequestMessage
   | OpenOptionsMessage
   | SpeakSourceMessage
-  | StopSpeakingMessage;
+  | StopSpeakingMessage
+  | SpeakingEndedMessage;
 
 export interface TranslateSuccessResponse {
   ok: true;

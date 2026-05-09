@@ -343,12 +343,72 @@ describe("background translation handling", () => {
 
     expect(listener?.({ type: "speak-source", text: "Learning" }, {}, sendResponse)).toBe(false);
     expect(chrome.tts.stop).toHaveBeenCalledTimes(1);
-    expect(chrome.tts.speak).toHaveBeenCalledWith("Learning", {
+    expect(chrome.tts.speak).toHaveBeenCalledWith("Learning", expect.objectContaining({
       enqueue: false,
       rate: 1
-    });
+    }));
     expect(sendResponse).not.toHaveBeenCalled();
     expect(requestDeepSeekTranslationMock).not.toHaveBeenCalled();
+  });
+
+  it("notifies the source tab when Chrome TTS ends", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 });
+    const runtime = installChromeRuntimeMock();
+    const sendMessage = vi.fn();
+    chrome.tabs = { sendMessage } as unknown as typeof chrome.tabs;
+    chrome.tts = {
+      stop: vi.fn(),
+      speak: vi.fn()
+    } as unknown as typeof chrome.tts;
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    listener?.({ type: "speak-source", text: "Learning" }, { tab: { id: 7 } } as chrome.runtime.MessageSender, vi.fn());
+    const options = vi.mocked(chrome.tts.speak).mock.calls[0]?.[1];
+    options?.onEvent?.({ type: "end", charIndex: 8 });
+
+    expect(sendMessage).toHaveBeenCalledWith(7, { type: "speaking-ended" });
+  });
+
+  it.each(["interrupted", "cancelled", "error"] as const)(
+    "notifies the source tab when Chrome TTS emits %s",
+    async (eventType) => {
+      installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 });
+      const runtime = installChromeRuntimeMock();
+      const sendMessage = vi.fn();
+      chrome.tabs = { sendMessage } as unknown as typeof chrome.tabs;
+      chrome.tts = {
+        stop: vi.fn(),
+        speak: vi.fn()
+      } as unknown as typeof chrome.tts;
+      await importBackground();
+
+      const listener = runtime.listeners[0];
+      listener?.({ type: "speak-source", text: "Learning" }, { tab: { id: 7 } } as chrome.runtime.MessageSender, vi.fn());
+      const options = vi.mocked(chrome.tts.speak).mock.calls[0]?.[1];
+      options?.onEvent?.({ type: eventType, charIndex: 0 });
+
+      expect(sendMessage).toHaveBeenCalledWith(7, { type: "speaking-ended" });
+    }
+  );
+
+  it("does not throw when Chrome TTS ends without a source tab id", async () => {
+    installChromeStorageMock({ apiKey: "sk-test", targetLanguage: "zh-CN", bubbleFontSize: 12 });
+    const runtime = installChromeRuntimeMock();
+    const sendMessage = vi.fn();
+    chrome.tabs = { sendMessage } as unknown as typeof chrome.tabs;
+    chrome.tts = {
+      stop: vi.fn(),
+      speak: vi.fn()
+    } as unknown as typeof chrome.tts;
+    await importBackground();
+
+    const listener = runtime.listeners[0];
+    listener?.({ type: "speak-source", text: "Learning" }, {}, vi.fn());
+    const options = vi.mocked(chrome.tts.speak).mock.calls[0]?.[1];
+
+    expect(() => options?.onEvent?.({ type: "end", charIndex: 8 })).not.toThrow();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("stops Chrome TTS for stop-speaking runtime messages", async () => {

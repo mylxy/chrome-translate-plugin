@@ -13,6 +13,7 @@ import type {
 } from "../shared/types";
 
 const FIXED_TARGET_LANGUAGE: TargetLanguage = "zh-CN";
+const TTS_DONE_EVENTS = new Set(["end", "interrupted", "cancelled", "error"]);
 let cacheWriteQueue: Promise<void> = Promise.resolve();
 
 function enqueueCacheWrite(text: string, targetLanguage: TargetLanguage, result: TranslationResult): Promise<void> {
@@ -111,12 +112,30 @@ function stopSpeaking(): void {
   }
 }
 
-function speakSourceText(text: string): void {
+function notifySpeakingEnded(tabId: number | undefined): void {
+  if (typeof tabId !== "number") return;
+
+  try {
+    const maybePromise = chrome.tabs?.sendMessage?.(tabId, { type: "speaking-ended" });
+    if (maybePromise && typeof maybePromise.catch === "function") {
+      maybePromise.catch(() => undefined);
+    }
+  } catch {
+    // Speaking-ended notifications are best effort.
+  }
+}
+
+function speakSourceText(text: string, tabId?: number): void {
   try {
     chrome.tts?.stop?.();
     chrome.tts?.speak?.(text, {
       enqueue: false,
-      rate: 1
+      rate: 1,
+      onEvent: (event) => {
+        if (TTS_DONE_EVENTS.has(event.type)) {
+          notifySpeakingEnded(tabId);
+        }
+      }
     });
   } catch {
     // Browser TTS is best effort from the background listener.
@@ -133,7 +152,7 @@ export function createTranslateSelectionListener(
     }
 
     if (isSpeakSourceMessage(message)) {
-      speakSourceText(message.text);
+      speakSourceText(message.text, _sender.tab?.id);
       return false;
     }
 
