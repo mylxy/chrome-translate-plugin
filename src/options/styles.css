@@ -1,8 +1,7 @@
 :root {
-  color: #1f2933;
-  background: #f6f8fb;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #111827;
+  background: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
@@ -11,119 +10,86 @@
 
 body {
   margin: 0;
+  width: 300px;
+  background: #f8fafc;
 }
 
-.options-shell {
-  width: min(100%, 720px);
-  margin: 0 auto;
-  padding: 32px 20px;
+.popup-shell {
+  padding: 12px;
 }
 
 .panel {
-  border: 1px solid #d8e0ea;
-  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 10px 24px rgb(31 41 51 / 8%);
+  padding: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
-.panel-header {
-  padding: 24px 24px 16px;
-  border-bottom: 1px solid #e6ebf1;
-}
-
-h1 {
+.panel-header h1 {
   margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-p {
-  margin: 8px 0 0;
-  color: #52606d;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.35;
 }
 
 .settings-form {
   display: grid;
   gap: 10px;
-  padding: 22px 24px 24px;
 }
 
-label {
-  color: #354052;
-  font-size: 14px;
-  font-weight: 600;
+label,
+.font-size-row {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-input,
-select {
+.font-size-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+output {
+  color: #111827;
+  font-weight: 650;
+}
+
+input[type="password"] {
   width: 100%;
-  min-height: 40px;
-  border: 1px solid #c7d2df;
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: #1f2933;
-  background: #ffffff;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 0 9px;
+  color: #111827;
   font: inherit;
 }
 
-input:focus,
-select:focus {
-  border-color: #2563eb;
-  outline: 3px solid rgb(37 99 235 / 16%);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
+input[type="range"] {
+  width: 100%;
 }
 
 button {
-  min-height: 38px;
-  border: 1px solid #1d4ed8;
-  border-radius: 6px;
-  padding: 8px 14px;
+  height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: #111827;
   color: #ffffff;
-  background: #2563eb;
-  font: inherit;
-  font-weight: 700;
   cursor: pointer;
+  font: inherit;
+  font-weight: 650;
 }
 
-button:hover {
-  background: #1d4ed8;
-}
-
-button.secondary {
-  border-color: #c7d2df;
-  color: #253449;
-  background: #ffffff;
-}
-
-button.secondary:hover {
-  background: #eef3f8;
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .status {
-  min-height: 22px;
-  margin-top: 6px;
-  color: #166534;
-  font-weight: 600;
-}
-
-@media (max-width: 480px) {
-  .options-shell {
-    padding: 18px 12px;
-  }
-
-  .panel-header,
-  .settings-form {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
+  min-height: 16px;
+  margin: 0;
+  color: #16a34a;
+  font-size: 11px;
 }

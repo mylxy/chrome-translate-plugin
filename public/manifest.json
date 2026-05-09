@@ -18,6 +18,7 @@
   ],
   "options_page": "src/options/index.html",
   "action": {
-    "default_title": "DeepSeek 划词翻译"
+    "default_title": "DeepSeek 划词翻译",
+    "default_popup": "src/options/index.html"
   }
 }
